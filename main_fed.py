@@ -58,13 +58,22 @@ if __name__ == '__main__':
     else:
         exit('Error: unrecognized model')
     print(net_glob)
-    net_glob.train()
 
     # copy weights
-    w_glob = net_glob.state_dict()
+    if args.pretrained_model:
+        net_glob.load_state_dict(torch.load(args.pretrained_model))
+    else:
+        w_glob = net_glob.state_dict()
+
+    # testing
+    net_glob.eval()
+    acc_train, loss_train = test_img(net_glob, dataset_train, args)
+    acc_test, loss_test = test_img(net_glob, dataset_test, args)
+    print("Initial Training accuracy: {:.2f}".format(acc_train))
+    print("Initial Testing accuracy: {:.2f}".format(acc_test))
 
     # training
-    loss_train = []
+    loss_train_list = []
     cv_loss, cv_acc = [], []
     val_loss_pre, counter = 0, 0
     net_best = None
@@ -72,6 +81,7 @@ if __name__ == '__main__':
     val_acc_list, net_list = [], []
 
     for iter in range(args.epochs):
+        net_glob.train()
         w_locals, loss_locals = [], []
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
@@ -89,11 +99,19 @@ if __name__ == '__main__':
         # print loss
         loss_avg = sum(loss_locals) / len(loss_locals)
         print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
-        loss_train.append(loss_avg)
+        loss_train_list.append(loss_avg)
+
+        if iter % args.eval_every == 0:
+            # testing
+            net_glob.eval()
+            acc_train, loss_train = test_img(net_glob, dataset_train, args)
+            acc_test, loss_test = test_img(net_glob, dataset_test, args)
+            print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
+            print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
 
     # plot loss curve
     plt.figure()
-    plt.plot(range(len(loss_train)), loss_train)
+    plt.plot(range(len(loss_train_list)), loss_train_list)
     plt.ylabel('train_loss')
     plt.savefig('./save/fed_{}_{}_{}_C{}_iid{}.png'.format(args.dataset, args.model, args.epochs, args.frac, args.iid))
 
@@ -101,6 +119,12 @@ if __name__ == '__main__':
     net_glob.eval()
     acc_train, loss_train = test_img(net_glob, dataset_train, args)
     acc_test, loss_test = test_img(net_glob, dataset_test, args)
-    print("Training accuracy: {:.2f}".format(acc_train))
-    print("Testing accuracy: {:.2f}".format(acc_test))
+    print("Final Training accuracy: {:.2f}".format(acc_train))
+    print("Final Testing accuracy: {:.2f}".format(acc_test))
 
+    # Print model's state_dict
+    print("Model's state_dict:")
+    for param_tensor in net_glob.state_dict():
+        print(param_tensor, "\t", net_glob.state_dict()[param_tensor].size())
+
+    torch.save(net_glob.state_dict(), "./saved_model")
