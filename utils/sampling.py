@@ -28,11 +28,14 @@ def mnist_noniid(dataset, num_users):
     :param num_users:
     :return:
     """
-    num_shards, num_imgs = 200, 300
+    total_imgs = dataset.train_labels.shape[0]
+    num_shards = 200
+    num_imgs = int(total_imgs / num_shards)
     idx_shard = [i for i in range(num_shards)]
     dict_users = {i: np.array([], dtype='int64') for i in range(num_users)}
     idxs = np.arange(num_shards*num_imgs)
-    labels = dataset.train_labels.numpy()
+    labels = dataset.train_labels
+    labels = labels[0:num_shards*num_imgs]
 
     # sort labels
     idxs_labels = np.vstack((idxs, labels))

@@ -17,6 +17,20 @@ from models.Nets import MLP, CNNMnist, CNNCifar
 from models.Fed import FedAvg
 from models.test import test_img
 
+class SubsetLoaderMNIST(datasets.MNIST):
+    def __init__(self, *args, exclude_list=[1,3,5,7,9], **kwargs):
+        super(SubsetLoaderMNIST, self).__init__(*args, **kwargs)
+
+        if exclude_list == []:
+            return
+
+        labels = np.array(self.targets)
+        exclude = np.array(exclude_list).reshape(1, -1)
+        mask = ~(labels.reshape(-1, 1) == exclude).any(axis=1)
+
+        self.data = self.data[mask]
+        self.targets = labels[mask]
+
 
 if __name__ == '__main__':
     # parse args
@@ -26,8 +40,13 @@ if __name__ == '__main__':
     # load dataset and split users
     if args.dataset == 'mnist':
         trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-        dataset_train = datasets.MNIST('../data/mnist/', train=True, download=True, transform=trans_mnist)
-        dataset_test = datasets.MNIST('../data/mnist/', train=False, download=True, transform=trans_mnist)
+        exclude_list = []
+        if args.subset == "odd":
+            exclude_list = [0,2,4,6,8]
+        elif args.subset == "even":
+            exclude_list = [1,3,5,7,9]
+        dataset_train = SubsetLoaderMNIST('../data/mnist/', train=True, download=True, transform=trans_mnist, exclude_list=exclude_list)
+        dataset_test = SubsetLoaderMNIST('../data/mnist/', train=False, download=True, transform=trans_mnist, exclude_list=exclude_list)
         # sample users
         if args.iid:
             dict_users = mnist_iid(dataset_train, args.num_users)
