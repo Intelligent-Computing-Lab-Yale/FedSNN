@@ -39,5 +39,6 @@ def args_parser():
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
     parser.add_argument('--eval_every', type=int, default=10, help='Frequency of model evaluation')
     parser.add_argument('--pretrained_model', type=str, default=None, help="Path for the pre-trained mode if any")
+    parser.add_argument('--result_dir', type=str, default="results", help="Path for the pre-trained mode if any")
     args = parser.parse_args()
     return args

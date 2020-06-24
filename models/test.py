@@ -30,5 +30,5 @@ def test_img(net_g, datatest, args):
     if args.verbose:
         print('\nTest set: Average loss: {:.4f} \nAccuracy: {}/{} ({:.2f}%)\n'.format(
             test_loss, correct, len(data_loader.dataset), accuracy))
-    return accuracy, test_loss
+    return accuracy.item(), test_loss
 

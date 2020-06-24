@@ -7,6 +7,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import copy
 import numpy as np
+import pandas as pd
+from pathlib import Path
 from torchvision import datasets, transforms
 import torch
 
@@ -84,13 +86,6 @@ if __name__ == '__main__':
     else:
         w_glob = net_glob.state_dict()
 
-    # testing
-    net_glob.eval()
-    acc_train, loss_train = test_img(net_glob, dataset_train, args)
-    acc_test, loss_test = test_img(net_glob, dataset_test, args)
-    print("Initial Training accuracy: {:.2f}".format(acc_train))
-    print("Initial Testing accuracy: {:.2f}".format(acc_test))
-
     # training
     loss_train_list = []
     cv_loss, cv_acc = [], []
@@ -98,6 +93,23 @@ if __name__ == '__main__':
     net_best = None
     best_loss = None
     val_acc_list, net_list = [], []
+
+    # metrics to store
+    ms_acc_train_list, ms_loss_train_list = [], []
+    ms_acc_test_list, ms_loss_test_list = [], []
+
+    # testing
+    net_glob.eval()
+    acc_train, loss_train = test_img(net_glob, dataset_train, args)
+    acc_test, loss_test = test_img(net_glob, dataset_test, args)
+    print("Initial Training accuracy: {:.2f}".format(acc_train))
+    print("Initial Testing accuracy: {:.2f}".format(acc_test))
+
+    # Add metrics to store
+    ms_acc_train_list.append(acc_train)
+    ms_acc_test_list.append(acc_test)
+    ms_loss_train_list.append(loss_train)
+    ms_loss_test_list.append(loss_test)
 
     for iter in range(args.epochs):
         net_glob.train()
@@ -128,11 +140,18 @@ if __name__ == '__main__':
             print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
             print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
 
+            # Add metrics to store
+            ms_acc_train_list.append(acc_train)
+            ms_acc_test_list.append(acc_test)
+            ms_loss_train_list.append(loss_train)
+            ms_loss_test_list.append(loss_test)
+
+    Path('./{}'.format(args.result_dir)).mkdir(parents=True, exist_ok=True)
     # plot loss curve
     plt.figure()
     plt.plot(range(len(loss_train_list)), loss_train_list)
     plt.ylabel('train_loss')
-    plt.savefig('./save/fed_{}_{}_{}_C{}_iid{}.png'.format(args.dataset, args.model, args.epochs, args.frac, args.iid))
+    plt.savefig('./{}/fed_loss_{}_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir,args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid))
 
     # testing
     net_glob.eval()
@@ -141,9 +160,34 @@ if __name__ == '__main__':
     print("Final Training accuracy: {:.2f}".format(acc_train))
     print("Final Testing accuracy: {:.2f}".format(acc_test))
 
+    # Add metrics to store
+    ms_acc_train_list.append(acc_train)
+    ms_acc_test_list.append(acc_test)
+    ms_loss_train_list.append(loss_train)
+    ms_loss_test_list.append(loss_test)
+
+    # plot loss curve
+    plt.figure()
+    plt.plot(range(len(ms_acc_train_list)), ms_acc_train_list)
+    plt.plot(range(len(ms_acc_test_list)), ms_acc_test_list)
+    plt.plot()
+    plt.ylabel('Accuracy')
+    plt.legend(['Training acc', 'Testing acc'])
+    plt.savefig('./{}/fed_acc_{}_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid))
+
+    # Write metric store into a CSV
+    metrics_df = pd.DataFrame(
+        {
+            'Train acc': ms_acc_train_list,
+            'Test acc': ms_acc_test_list,
+            'Train loss': ms_loss_train_list,
+            'Test loss': ms_loss_test_list
+        })
+    metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid), sep='\t')
+
     # Print model's state_dict
     print("Model's state_dict:")
     for param_tensor in net_glob.state_dict():
         print(param_tensor, "\t", net_glob.state_dict()[param_tensor].size())
 
-    torch.save(net_glob.state_dict(), "./saved_model")
+    torch.save(net_glob.state_dict(), './{}/saved_model'.format(args.result_dir))
