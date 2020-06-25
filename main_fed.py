@@ -20,7 +20,7 @@ from models.Fed import FedAvg
 from models.test import test_img
 
 class SubsetLoaderMNIST(datasets.MNIST):
-    def __init__(self, *args, exclude_list=[1,3,5,7,9], **kwargs):
+    def __init__(self, *args, exclude_list=[], **kwargs):
         super(SubsetLoaderMNIST, self).__init__(*args, **kwargs)
 
         if exclude_list == []:
@@ -33,20 +33,48 @@ class SubsetLoaderMNIST(datasets.MNIST):
         self.data = self.data[mask]
         self.targets = labels[mask]
 
+class SubsetLoaderCIFAR10(datasets.CIFAR10):
+    def __init__(self, *args, exclude_list=[], **kwargs):
+        super(SubsetLoaderCIFAR10, self).__init__(*args, **kwargs)
+
+        if exclude_list == []:
+            return
+
+        labels = np.array(self.targets)
+        exclude = np.array(exclude_list).reshape(1, -1)
+        mask = ~(labels.reshape(-1, 1) == exclude).any(axis=1)
+
+        self.data = self.data[mask]
+        self.targets = labels[mask]
+
+class SubsetLoaderCIFAR100(datasets.CIFAR100):
+    def __init__(self, *args, exclude_list=[], **kwargs):
+        super(SubsetLoaderCIFAR100, self).__init__(*args, **kwargs)
+
+        if exclude_list == []:
+            return
+
+        labels = np.array(self.targets)
+        exclude = np.array(exclude_list).reshape(1, -1)
+        mask = ~(labels.reshape(-1, 1) == exclude).any(axis=1)
+
+        self.data = self.data[mask]
+        self.targets = labels[mask]
 
 if __name__ == '__main__':
     # parse args
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
+    exclude_list = []
+    if args.subset == "odd":
+        exclude_list = list(range(0, args.num_classes,2))
+    elif args.subset == "even":
+        exclude_list = list(range(1, args.num_classes,2))
+
     # load dataset and split users
     if args.dataset == 'mnist':
         trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-        exclude_list = []
-        if args.subset == "odd":
-            exclude_list = [0,2,4,6,8]
-        elif args.subset == "even":
-            exclude_list = [1,3,5,7,9]
         dataset_train = SubsetLoaderMNIST('../data/mnist/', train=True, download=True, transform=trans_mnist, exclude_list=exclude_list)
         dataset_test = SubsetLoaderMNIST('../data/mnist/', train=False, download=True, transform=trans_mnist, exclude_list=exclude_list)
         # sample users
@@ -56,18 +84,27 @@ if __name__ == '__main__':
             dict_users = mnist_noniid(dataset_train, args.num_users)
     elif args.dataset == 'cifar':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-        dataset_train = datasets.CIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar)
-        dataset_test = datasets.CIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar)
+        dataset_train = SubsetLoaderCIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar, exclude_list=exclude_list)
+        dataset_test = SubsetLoaderCIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar, exclude_list=exclude_list)
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
             exit('Error: only consider IID setting in CIFAR10')
+    elif args.dataset == 'cifar100':
+        trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        dataset_train = SubsetLoaderCIFAR100('../data/cifar100', train=True, download=True, transform=trans_cifar)
+        dataset_test = SubsetLoaderCIFAR100('../data/cifar100', train=False, download=True, transform=trans_cifar)
+        if args.iid:
+            dict_users = cifar_iid(dataset_train, args.num_users)
+        else:
+            exit('Error: only consider IIT setting in CIFAR10')
+
     else:
         exit('Error: unrecognized dataset')
     img_size = dataset_train[0][0].shape
 
     # build model
-    if args.model == 'cnn' and args.dataset == 'cifar':
+    if args.model == 'cnn' and (args.dataset == 'cifar' or args.dataset == 'cifar100'):
         net_glob = CNNCifar(args=args).to(args.device)
     elif args.model == 'cnn' and args.dataset == 'mnist':
         net_glob = CNNMnist(args=args).to(args.device)
