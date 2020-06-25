@@ -5,7 +5,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-
+import torchvision.models as models
 
 class MLP(nn.Module):
     def __init__(self, dim_in, dim_hidden, dim_out):
@@ -60,4 +60,15 @@ class CNNCifar(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
+        return x
+
+class VGG11_CIFAR100(nn.Module):
+    def __init__(self, args):
+        super(VGG11_CIFAR100,self).__init__()
+        self.net = models.vgg11()
+        self.extra_layer = nn.Linear(1000, args.num_classes)
+
+    def forward(self,x):
+        x = self.net(x)
+        x = self.extra_layer(x)
         return x

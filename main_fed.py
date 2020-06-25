@@ -15,7 +15,7 @@ import torch
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
-from models.Nets import MLP, CNNMnist, CNNCifar
+from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100
 from models.Fed import FedAvg
 from models.test import test_img
 
@@ -97,7 +97,7 @@ if __name__ == '__main__':
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
-            exit('Error: only consider IIT setting in CIFAR10')
+            exit('Error: only consider IID setting in CIFAR10')
 
     else:
         exit('Error: unrecognized dataset')
@@ -106,6 +106,8 @@ if __name__ == '__main__':
     # build model
     if args.model == 'cnn' and (args.dataset == 'cifar' or args.dataset == 'cifar100'):
         net_glob = CNNCifar(args=args).to(args.device)
+    elif args.model == 'vgg11' and args.dataset == 'cifar100':
+        net_glob = VGG11_CIFAR100(args=args).to(args.device)
     elif args.model == 'cnn' and args.dataset == 'mnist':
         net_glob = CNNMnist(args=args).to(args.device)
     elif args.model == 'mlp':
