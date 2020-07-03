@@ -29,7 +29,8 @@ def args_parser():
 
     # other arguments
     parser.add_argument('--dataset', type=str, default='mnist', help="name of dataset")
-    parser.add_argument('--subset', type=str, default='full', help="MNIST subset - full/odd/even")
+    parser.add_argument('--subset', type=str, default='full', help="Data subset based on classes - full/odd/even")
+    parser.add_argument('--part', type=str, default='full', help="Data subt based on index - full/first/second. first:even indexed data, second:even indexed data") # First and second to avoid odd and even confusion
     parser.add_argument('--iid', action='store_true', help='whether i.i.d or not')
     parser.add_argument('--num_classes', type=int, default=10, help="number of classes")
     parser.add_argument('--num_channels', type=int, default=3, help="number of channels of imges")

@@ -11,9 +11,16 @@ from sklearn import metrics
 
 
 class DatasetSplit(Dataset):
-    def __init__(self, dataset, idxs):
+    def __init__(self, dataset, idxs, part = "full"):
         self.dataset = dataset
-        self.idxs = list(idxs)
+        if part == "full":
+            self.idxs = list(idxs)
+        elif part == "first":
+            self.idxs = list(idxs)[0::2] # Sample even indexed data
+        elif part == "second":
+            self.idxs = list(idxs)[1::2] # Sample only odd indexed data
+        else:
+            exit("Part invalid")
 
     def __len__(self):
         return len(self.idxs)
@@ -28,7 +35,7 @@ class LocalUpdate(object):
         self.args = args
         self.loss_func = nn.CrossEntropyLoss()
         self.selected_clients = []
-        self.ldr_train = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
+        self.ldr_train = DataLoader(DatasetSplit(dataset, idxs, part=args.part), batch_size=self.args.local_bs, shuffle=True)
 
     def train(self, net):
         net.train()
