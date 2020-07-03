@@ -15,9 +15,10 @@ import torch
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
-from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100
+from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
 from models.Fed import FedAvg
 from models.test import test_img
+import pytorch_cifar.models as pcm
 
 class SubsetLoaderMNIST(datasets.MNIST):
     def __init__(self, *args, exclude_list=[], **kwargs):
@@ -104,8 +105,15 @@ if __name__ == '__main__':
     img_size = dataset_train[0][0].shape
 
     # build model
-    if args.model == 'cnn' and (args.dataset == 'cifar' or args.dataset == 'cifar100'):
+    if args.dataset == 'cifar':
+        if args.model == 'MobileNetV2':
+            net_glob = pcm.MobileNetV2().to(args.device)
+        else:
+            exit("Invalid model")
+    elif args.model == 'cnn' and (args.dataset == 'cifar' or args.dataset == 'cifar100'):
         net_glob = CNNCifar(args=args).to(args.device)
+    elif args.model == 'VGG' and args.dataset == 'cifar':
+        net_glob = VGG(args=args).to(args.device)
     elif args.model == 'vgg11' and args.dataset == 'cifar100':
         net_glob = VGG11_CIFAR100(args=args).to(args.device)
     elif args.model == 'cnn' and args.dataset == 'mnist':
@@ -184,6 +192,11 @@ if __name__ == '__main__':
             ms_acc_test_list.append(acc_test)
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
+
+        if iter == int(args.epochs/2):
+            args.lr = args.lr/10
+        if iter == int(3*args.epochs/4):
+            args.lr = args.lr/10
 
     Path('./{}'.format(args.result_dir)).mkdir(parents=True, exist_ok=True)
     # plot loss curve
