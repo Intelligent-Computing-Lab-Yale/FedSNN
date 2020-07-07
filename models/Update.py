@@ -45,6 +45,8 @@ class LocalUpdate(object):
         epoch_loss = []
         for iter in range(self.args.local_ep):
             batch_loss = []
+            if self.args.snn:
+                net.module.network_update(timesteps = self.args.timesteps, leak = self.args.leak)
             for batch_idx, (images, labels) in enumerate(self.ldr_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 net.zero_grad()
@@ -57,6 +59,11 @@ class LocalUpdate(object):
                         iter, batch_idx * len(images), len(self.ldr_train.dataset),
                                100. * batch_idx / len(self.ldr_train), loss.item()))
                 batch_loss.append(loss.item())
+                if (batch_idx + 1) % self.args.train_acc_batches == 0:
+                    thresholds = []
+                    for value in net.module.threshold.values():
+                        thresholds = thresholds + [round(value.item(), 2)]
+                        print('Epoch: {}, batch {}, threshold {}, leak {}, timesteps {}'.format(iter, batch_idx + 1, thresholds, net.module.leak.item(), net.module.timesteps))
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
         return net.state_dict(), sum(epoch_loss) / len(epoch_loss)
 

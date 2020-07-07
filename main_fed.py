@@ -11,6 +11,7 @@ import pandas as pd
 from pathlib import Path
 from torchvision import datasets, transforms
 import torch
+import torch.nn as nn
 
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
 from utils.options import args_parser
@@ -19,6 +20,7 @@ from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
 from models.Fed import FedAvg
 from models.test import test_img
 import pytorch_cifar.models as pcm
+import hybrid_snn_conversion.self_models as snn_models
 
 class SubsetLoaderMNIST(datasets.MNIST):
     def __init__(self, *args, exclude_list=[], **kwargs):
@@ -62,10 +64,61 @@ class SubsetLoaderCIFAR100(datasets.CIFAR100):
         self.data = self.data[mask]
         self.targets = labels[mask]
 
+def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
+    loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
+    net_glob.network_update(timesteps=args.timesteps, leak=1.0)
+
+    pos=0
+    thresholds=[]
+    
+    def find(layer, pos):
+        max_act=0
+        
+        print('Finding threshold for layer {}'.format(layer))
+        for batch_idx, (data, target) in enumerate(loader):
+            
+            data, target = data.cuda(), target.cuda()
+
+            with torch.no_grad():
+                net_glob.eval()
+                output = net_glob(data, find_max_mem=True, max_mem_layer=layer)
+                if output>max_act:
+                    max_act = output.item()
+
+                #f.write('\nBatch:{} Current:{:.4f} Max:{:.4f}'.format(batch_idx+1,output.item(),max_act))
+                if batch_idx==0:
+                    thresholds.append(max_act)
+                    pos = pos+1
+                    print(' {}'.format(thresholds))
+                    net_glob.threshold_update(scaling_factor=1.0, thresholds=thresholds[:])
+                    break
+        return pos
+
+    if architecture.lower().startswith('vgg'):                                     
+        for l in net_glob.features.named_children():                           
+            if isinstance(l[1], nn.Conv2d):
+                pos = find(int(l[0]), pos)
+            
+        for c in net_glob.classifier.named_children():                         
+            if isinstance(c[1], nn.Linear):                                        
+                if (int(l[0])+int(c[0])+1) == (len(net_glob.features) + len(net_glob.classifier) -1):       
+                    pass
+                else:
+                    pos = find(int(l[0])+int(c[0])+1, pos)                         
+                    
+    if architecture.lower().startswith('res'):                                     
+        for l in net_glob.pre_process.named_children():                        
+            if isinstance(l[1], nn.Conv2d):                                        
+                pos = find(int(l[0]), pos)
+    print('ANN thresholds: {}'.format(thresholds))
+    return thresholds
+
+
 if __name__ == '__main__':
     # parse args
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
     exclude_list = []
     if args.subset == "odd":
@@ -83,7 +136,7 @@ if __name__ == '__main__':
             dict_users = mnist_iid(dataset_train, args.num_users)
         else:
             dict_users = mnist_noniid(dataset_train, args.num_users)
-    elif args.dataset == 'cifar':
+    elif args.dataset == 'CIFAR10':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         dataset_train = SubsetLoaderCIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar, exclude_list=exclude_list)
         dataset_test = SubsetLoaderCIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar, exclude_list=exclude_list)
@@ -105,16 +158,25 @@ if __name__ == '__main__':
     img_size = dataset_train[0][0].shape
 
     # build model
-    if args.dataset == 'cifar':
+    model_args = {'args': args}
+    if args.snn:
+        if args.dataset == 'CIFAR10':
+            if args.model == 'VGG5':
+                model_args = {'vgg_name': args.model, 'activation': args.activation, 'labels': args.num_classes, 'timesteps': args.timesteps, 'leak': args.leak, 'default_threshold': args.default_threshold, 'alpha': args.alpha, 'beta': args.beta, 'dropout': args.dropout, 'kernel_size': args.snn_kernel_size, 'dataset': args.dataset}
+                net_glob = snn_models.VGG_SNN_STDB(**model_args).cuda()
+    elif args.dataset == 'CIFAR10' and args.model[0:3].lower() == 'vgg':
+        model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
+        net_glob = snn_models.VGG(**model_args).cuda()
+    elif args.dataset == 'CIFAR10':
         if args.model == 'MobileNetV2':
             net_glob = pcm.MobileNetV2().to(args.device)
         else:
             exit("Invalid model")
-    elif args.model == 'cnn' and (args.dataset == 'cifar' or args.dataset == 'cifar100'):
+    elif args.model == 'cnn' and (args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100'):
         net_glob = CNNCifar(args=args).to(args.device)
-    elif args.model == 'VGG' and args.dataset == 'cifar':
+    elif args.model == 'VGG' and args.dataset == 'CIFAR10':
         net_glob = VGG(args=args).to(args.device)
-    elif args.model == 'vgg11' and args.dataset == 'cifar100':
+    elif args.model == 'vgg11' and args.dataset == 'CIFAR100':
         net_glob = VGG11_CIFAR100(args=args).to(args.device)
     elif args.model == 'cnn' and args.dataset == 'mnist':
         net_glob = CNNMnist(args=args).to(args.device)
@@ -122,17 +184,20 @@ if __name__ == '__main__':
         len_in = 1
         for x in img_size:
             len_in *= x
-        net_glob = MLP(dim_in=len_in, dim_hidden=200, dim_out=args.num_classes).to(args.device)
+        model_args = {'dim_in': len_in, 'dim_hidden': 200, 'dim_out': args.num_classes}
+        net_glob = MLP(**model_args ).to(args.device)
     else:
         exit('Error: unrecognized model')
     print(net_glob)
 
     # copy weights
     if args.pretrained_model:
-        net_glob.load_state_dict(torch.load(args.pretrained_model))
-    else:
-        w_glob = net_glob.state_dict()
+        net_glob.load_state_dict(torch.load(args.pretrained_model, map_location='cpu'))
+        if args.snn:
+            thresholds = find_threshold(batch_size=512, timesteps=1000, architecture = args.model)
+            net_glob.threshold_update(scaling_factor = args.scaling_factor, thresholds = thresholds[:])
 
+    net_glob = nn.DataParallel(net_glob)
     # training
     loss_train_list = []
     cv_loss, cv_acc = [], []
@@ -158,14 +223,31 @@ if __name__ == '__main__':
     ms_loss_train_list.append(loss_train)
     ms_loss_test_list.append(loss_test)
 
+    # Define LR Schedule
+    values = args.lr_interval.split()
+    lr_interval = []
+    for value in values:
+        lr_interval.append(int(float(value)*args.epochs))
+
     for iter in range(args.epochs):
         net_glob.train()
+        if args.snn:
+            net_glob.module.network_update(timesteps=args.timesteps, leak=args.leak)
         w_locals, loss_locals = [], []
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
         for idx in idxs_users:
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
-            w, loss = local.train(net=copy.deepcopy(net_glob).to(args.device))
+            print(type(net_glob.module))
+            model_copy = type(net_glob.module)(**model_args) # get a new instance
+            if args.snn:
+                thresholds = []
+                for value in net_glob.module.threshold.values():
+                    thresholds = thresholds + [value.item()]
+                model_copy.threshold_update(scaling_factor=1.0, thresholds=thresholds)
+            model_copy = nn.DataParallel(model_copy)
+            model_copy.load_state_dict(net_glob.state_dict()) # copy weights and stuff
+            w, loss = local.train(net=model_copy.to(args.device))
             w_locals.append(copy.deepcopy(w))
             loss_locals.append(copy.deepcopy(loss))
         # update global weights
@@ -193,10 +275,8 @@ if __name__ == '__main__':
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
 
-        if iter == int(args.epochs/2):
-            args.lr = args.lr/10
-        if iter == int(3*args.epochs/4):
-            args.lr = args.lr/10
+        if iter in lr_interval:
+            args.lr = args.lr/args.lr_reduce
 
     Path('./{}'.format(args.result_dir)).mkdir(parents=True, exist_ok=True)
     # plot loss curve
@@ -242,4 +322,4 @@ if __name__ == '__main__':
     for param_tensor in net_glob.state_dict():
         print(param_tensor, "\t", net_glob.state_dict()[param_tensor].size())
 
-    torch.save(net_glob.state_dict(), './{}/saved_model'.format(args.result_dir))
+    torch.save(net_glob.module.state_dict(), './{}/saved_model'.format(args.result_dir))
