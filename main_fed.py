@@ -260,9 +260,17 @@ if __name__ == '__main__':
             w_locals.append(copy.deepcopy(w))
             loss_locals.append(copy.deepcopy(loss))
         # update global weights
-        w_glob = fl.FedAvg(w_locals)
+        # w_glob = fl.FedAvg(w_locals)
+        w_init = net_glob.state_dict()
+        delta_w_locals = []
+        for i in range(0, len(w_locals)):
+            delta_w = {}
+            for k in w_init.keys():
+                delta_w[k] = w_locals[i][k] - w_init[k]
+            delta_w_locals.append(delta_w)
+        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, sparsity = 95)
 
-        comm_cost, nz_grad = fl.count_gradients(net_glob.state_dict(), w_locals)
+        comm_cost, nz_grad = fl.count_gradients(delta_w_locals, sparse_delta_w_locals)
 
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
