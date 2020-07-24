@@ -49,3 +49,6 @@ wheels/
 venv/
 ENV/
 
+CIFAR*
+cifar*
+*results*

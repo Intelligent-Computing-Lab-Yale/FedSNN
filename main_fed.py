@@ -17,7 +17,7 @@ from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
 from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
-from models.Fed import FedAvg
+from models.Fed import FedLearn
 from models.test import test_img
 import pytorch_cifar.models as pcm
 import hybrid_snn_conversion.self_models as snn_models
@@ -117,7 +117,11 @@ def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
 if __name__ == '__main__':
     # parse args
     args = args_parser()
+    torch.manual_seed(args.seed)
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
+    if args.device != 'cpu':
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
     exclude_list = []
@@ -161,7 +165,7 @@ if __name__ == '__main__':
     model_args = {'args': args}
     if args.snn:
         if args.dataset == 'CIFAR10':
-            if args.model == 'VGG5':
+            if args.model[0:3].lower() == 'vgg':
                 model_args = {'vgg_name': args.model, 'activation': args.activation, 'labels': args.num_classes, 'timesteps': args.timesteps, 'leak': args.leak, 'default_threshold': args.default_threshold, 'alpha': args.alpha, 'beta': args.beta, 'dropout': args.dropout, 'kernel_size': args.snn_kernel_size, 'dataset': args.dataset}
                 net_glob = snn_models.VGG_SNN_STDB(**model_args).cuda()
     elif args.dataset == 'CIFAR10' and args.model[0:3].lower() == 'vgg':
@@ -209,6 +213,8 @@ if __name__ == '__main__':
     # metrics to store
     ms_acc_train_list, ms_loss_train_list = [], []
     ms_acc_test_list, ms_loss_test_list = [], []
+    ms_num_client_list, ms_tot_comm_cost_list, ms_avg_comm_cost_list, ms_max_comm_cost_list = [], [], [], []
+    ms_tot_nz_grad_list, ms_avg_nz_grad_list, ms_max_nz_grad_list = [], [], []
 
     # testing
     net_glob.eval()
@@ -228,6 +234,9 @@ if __name__ == '__main__':
     lr_interval = []
     for value in values:
         lr_interval.append(int(float(value)*args.epochs))
+
+    # Define Fed Learn object
+    fl = FedLearn(args)
 
     for iter in range(args.epochs):
         net_glob.train()
@@ -251,7 +260,9 @@ if __name__ == '__main__':
             w_locals.append(copy.deepcopy(w))
             loss_locals.append(copy.deepcopy(loss))
         # update global weights
-        w_glob = FedAvg(w_locals)
+        w_glob = fl.FedAvg(w_locals)
+
+        comm_cost, nz_grad = fl.count_gradients(net_glob.state_dict(), w_locals)
 
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
@@ -274,6 +285,24 @@ if __name__ == '__main__':
             ms_acc_test_list.append(acc_test)
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
+
+            # print communication cost
+            tot_comm_cost = sum(comm_cost)
+            avg_comm_cost = sum(comm_cost) / len(comm_cost)
+            max_comm_cost = max(comm_cost)
+            print('Round {:3d}, Num Clients {}, Tot. Comm. Cost {:.1f}, Average Comm. Cost {:.1f}, Max Comm. Cost {:.1f}'.format(iter, len(comm_cost), tot_comm_cost, avg_comm_cost, max_comm_cost))
+            ms_num_client_list.append(len(comm_cost))
+            ms_tot_comm_cost_list.append(tot_comm_cost)
+            ms_avg_comm_cost_list.append(avg_comm_cost)
+            ms_max_comm_cost_list.append(max_comm_cost)
+
+            tot_nz_grad = sum(nz_grad)
+            avg_nz_grad = sum(nz_grad) / len(nz_grad)
+            max_nz_grad = max(nz_grad)
+            print('Round {:3d}, Num Clients {}, Tot. Comm. Cost {:.1f}, Average Comm. Cost {:.1f}, Max Comm. Cost {:.1f}'.format(iter, len(nz_grad), tot_nz_grad, avg_nz_grad, max_nz_grad))
+            ms_tot_nz_grad_list.append(tot_nz_grad)
+            ms_avg_nz_grad_list.append(avg_nz_grad)
+            ms_max_nz_grad_list.append(max_nz_grad)
 
         if iter in lr_interval:
             args.lr = args.lr/args.lr_reduce
@@ -316,6 +345,18 @@ if __name__ == '__main__':
             'Test loss': ms_loss_test_list
         })
     metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid), sep='\t')
+
+    comm_metrics_df = pd.DataFrame(
+        {
+            'num_clients': ms_num_client_list,
+            'tot_comm_cost': ms_tot_comm_cost_list,
+            'avg_comm_cost': ms_avg_comm_cost_list,
+            'max_comm_cost': ms_max_comm_cost_list,
+            'tot_nz_grad': ms_tot_nz_grad_list,
+            'avg_nz_grad': ms_avg_nz_grad_list,
+            'max_nz_grad': ms_max_nz_grad_list
+        })
+    comm_metrics_df.to_csv('./{}/fed_comm_stats_{}_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
     # Print model's state_dict
     print("Model's state_dict:")
