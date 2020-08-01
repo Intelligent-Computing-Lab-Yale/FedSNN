@@ -58,5 +58,6 @@ def args_parser():
     parser.add_argument('--result_dir', type=str, default="results", help="Directory to store results")
     parser.add_argument('--snn', action='store_true', help="Whether to train SNN or ANN")
     parser.add_argument('--train_acc_batches', default=200, type=int, help='print training progress after this many batches')
+    parser.add_argument('--grad_sparsity', type=float, default=0.0, help="Gradient Sparsity")
     args = parser.parse_args()
     return args

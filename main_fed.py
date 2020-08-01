@@ -268,7 +268,7 @@ if __name__ == '__main__':
             for k in w_init.keys():
                 delta_w[k] = w_locals[i][k] - w_init[k]
             delta_w_locals.append(delta_w)
-        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, sparsity = 95)
+        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, sparsity = args.grad_sparsity)
 
         comm_cost, nz_grad = fl.count_gradients(delta_w_locals, sparse_delta_w_locals)
 
