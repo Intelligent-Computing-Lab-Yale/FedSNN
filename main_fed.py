@@ -64,6 +64,46 @@ class SubsetLoaderCIFAR100(datasets.CIFAR100):
         self.data = self.data[mask]
         self.targets = labels[mask]
 
+def find_activity(batch_size=512, timesteps=2500, architecture='VGG5'):
+    loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
+    activity = []
+    pos=0
+
+    def find(layer, pos):
+        print('Finding activity for layer {}'.format(layer))
+        for batch_idx, (data, target) in enumerate(loader):
+
+            data, target = data.cuda(), target.cuda()
+
+            with torch.no_grad():
+                net_glob.eval()
+                tot_spikes, nz_spikes = net_glob(data, find_activity=True, activity_layer=layer)
+
+                if batch_idx==0:
+                    activity.append(nz_spikes/tot_spikes)
+                    pos = pos+1
+                    print(' {}'.format(activity))
+                    break
+        return pos
+
+    if architecture.lower().startswith('vgg'):
+        for l in net_glob.features.named_children():
+            if isinstance(l[1], nn.Conv2d):
+                pos = find(int(l[0]), pos)
+        for c in net_glob.classifier.named_children():
+            if isinstance(c[1], nn.Linear):
+                if (int(l[0])+int(c[0])+1) == (len(net_glob.features) + len(net_glob.classifier) -1):
+                    pass
+                else:
+                    pos = find(int(l[0])+int(c[0])+1, pos)
+
+    if architecture.lower().startswith('res'):
+        for l in net_glob.pre_process.named_children():
+            if isinstance(l[1], nn.Conv2d):
+                pos = find(int(l[0]), pos)
+    print('Spike activity: {}'.format(activity))
+    return activity
+
 def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
     loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
     net_glob.network_update(timesteps=args.timesteps, leak=1.0)
