@@ -64,22 +64,24 @@ class SubsetLoaderCIFAR100(datasets.CIFAR100):
         self.data = self.data[mask]
         self.targets = labels[mask]
 
-def find_activity(batch_size=512, timesteps=2500, architecture='VGG5'):
+def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batches = 10):
     loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
     activity = []
     pos=0
 
     def find(layer, pos):
         print('Finding activity for layer {}'.format(layer))
+        tot_spikes = 0.0
+        nz_spikes = 0.0
         for batch_idx, (data, target) in enumerate(loader):
-
             data, target = data.cuda(), target.cuda()
 
             with torch.no_grad():
                 net_glob.eval()
-                tot_spikes, nz_spikes = net_glob(data, find_activity=True, activity_layer=layer)
-
-                if batch_idx==0:
+                tot_spikes_, nz_spikes_ = net_glob(data, find_activity=True, activity_layer=layer)
+                tot_spikes += tot_spikes_
+                nz_spikes += nz_spikes_
+                if batch_idx==num_batches - 1:
                     activity.append(nz_spikes/tot_spikes)
                     pos = pos+1
                     print(' {}'.format(activity))
