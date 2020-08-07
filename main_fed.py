@@ -242,6 +242,8 @@ if __name__ == '__main__':
         if args.snn:
             thresholds = find_threshold(batch_size=512, timesteps=1000, architecture = args.model)
             net_glob.threshold_update(scaling_factor = args.scaling_factor, thresholds = thresholds[:])
+            activity = find_activity(batch_size=512, timesteps=1000, architecture = args.model, num_batches = 20)
+            net_glob.activity_update(activity = activity[:])
 
     net_glob = nn.DataParallel(net_glob)
     # training
@@ -310,7 +312,11 @@ if __name__ == '__main__':
             for k in w_init.keys():
                 delta_w[k] = w_locals[i][k] - w_init[k]
             delta_w_locals.append(delta_w)
-        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, sparsity = args.grad_sparsity)
+        if args.snn and args.activity_based_sparsity:
+            activity = net_glob.module.activity
+        else:
+            activity = None
+        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, sparsity = args.grad_sparsity, activity = activity, activity_multiplier = args.activity_multiplier)
 
         comm_cost, nz_grad = fl.count_gradients(delta_w_locals, sparse_delta_w_locals)
 

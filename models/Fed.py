@@ -37,7 +37,7 @@ class FedLearn(object):
             w_avg[k] = torch.div(w_avg[k], len(w))
         return w_avg
 
-    def FedAvgSparse(self, w_init, delta_w_locals, sparsity = 90):
+    def FedAvgSparse(self, w_init, delta_w_locals, sparsity = 90, activity = None, activity_multiplier = None):
         delta_w_avg = {}
         w_avg = {}
         sparse_delta_w_locals = []
@@ -45,7 +45,21 @@ class FedLearn(object):
             sparse_delta_w = {}
             sparse_delta_w_locals.append(sparse_delta_w)
         for k in w_init.keys():
-            th = percentile(torch.abs(delta_w_locals[0][k]), sparsity)
+            layer_activity = None
+            if "features" in k:
+                idx = int(k.split(sep='.')[2])
+                layer_activity = activity[idx]
+                prev = idx
+            elif "classifier" in k:
+                idx = int(k.split(sep='.')[2]) + prev + 3
+                if idx in activity.keys():
+                    layer_activity = activity[idx]
+            else:
+                print("Unknown Layer!")
+            if layer_activity:
+                th = percentile(torch.abs(delta_w_locals[0][k]), 100*(1 - layer_activity/activity_multiplier))
+            else:
+                th = percentile(torch.abs(delta_w_locals[0][k]), sparsity)
             th = torch.FloatTensor([th]).cuda()
             mask = torch.abs(delta_w_locals[0][k]) > th.expand_as(w_init[k])
             sparse_delta_w_locals[0][k] = delta_w_locals[0][k] * mask
