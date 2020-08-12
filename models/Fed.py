@@ -37,7 +37,10 @@ class FedLearn(object):
             w_avg[k] = torch.div(w_avg[k], len(w))
         return w_avg
 
-    def FedAvgSparse(self, w_init, delta_w_locals, sparsity = 90, activity = None, activity_multiplier = None):
+    def FedAvgSparse(self, w_init, delta_w_locals, th_basis = "magnitude", pruning_type = "uniform", sparsity = 0, activity = None, activity_multiplier = 1, activity_mask = None):
+        # th_basis -> on what basis the threshold is calculated - magnitude or activity
+        # pruningy_type -> uniform or dynamic: uniform will have equal sparsity among all layers. dynamic has different sparsity for different layers based on activity.
+        # Only magnitude based uniform is applicable for ANNs
         delta_w_avg = {}
         w_avg = {}
         sparse_delta_w_locals = []
@@ -45,32 +48,176 @@ class FedLearn(object):
             sparse_delta_w = {}
             sparse_delta_w_locals.append(sparse_delta_w)
         for k in w_init.keys():
-            layer_activity = None
-            if "features" in k:
-                idx = int(k.split(sep='.')[2])
-                layer_activity = activity[idx]
-                prev = idx
-            elif "classifier" in k:
-                idx = int(k.split(sep='.')[2]) + prev + 3
-                if idx in activity.keys():
-                    layer_activity = activity[idx]
-            else:
-                print("Unknown Layer!")
-            if layer_activity:
-                th = percentile(torch.abs(delta_w_locals[0][k]), 100*(1 - layer_activity/activity_multiplier))
-            else:
+            # Threshold Calculation
+            if th_basis == "magnitude" and pruning_type == "uniform":
                 th = percentile(torch.abs(delta_w_locals[0][k]), sparsity)
-            th = torch.FloatTensor([th]).cuda()
-            mask = torch.abs(delta_w_locals[0][k]) > th.expand_as(w_init[k])
+                th = torch.FloatTensor([th]).cuda()
+                mask = torch.abs(delta_w_locals[0][k]) > th.expand_as(w_init[k])
+            elif th_basis == "magnitude" and pruning_type == "dynamic":
+                if activity is None:
+                    print("Layer activity not available. Dynamic sparsity not possible")
+                if "features" in k:
+                    idx = int(k.split(sep='.')[2])
+                    layer_activity = activity[idx]
+                    prev = idx
+                elif "classifier" in k:
+                    idx = int(k.split(sep='.')[2]) + prev + 3
+                    if idx in activity.keys():
+                        layer_activity = activity[idx]
+                    else:
+                        layer_activity = sum(activity) / len(activity)
+                else:
+                    print("Unknown Layer!")
+                s = 100*(1 - layer_activity/activity_multiplier)
+                print("sparsity", s)
+                th = percentile(torch.abs(delta_w_locals[0][k]), s)
+                print("Threshold", th)
+                th = torch.FloatTensor([th]).cuda()
+                mask = torch.abs(delta_w_locals[0][k]) > th.expand_as(w_init[k])
+            elif th_basis == "activity" and pruning_type == "uniform":
+                if activity_mask is None:
+                    print("Activity mask is not available. Activity based pruning not possible")
+                if "features" in k:
+                    idx = int(k.split(sep='.')[2])
+                    layer_activity_mask = activity_mask[idx]
+                    prev = idx
+                elif "classifier" in k:
+                    idx = int(k.split(sep='.')[2]) + prev + 3
+                    if idx in activity_mask.keys():
+                        layer_activity_mask = activity_mask[idx]
+                    else:
+                        layer_activity_mask = torch.tensor(1)
+                else:
+                    print("Unknown Layer!")
+                if layer_activity_mask.shape == torch.Size([]):
+                    th = percentile(torch.abs(delta_w_locals[0][k]), sparsity)
+                    th = torch.FloatTensor([th]).cuda()
+                    mask = torch.abs(delta_w_locals[0][k]) > th.expand_as(w_init[k])
+                else:
+                    th = percentile(layer_activity_mask, sparsity)
+                    th = torch.FloatTensor([th]).cuda()
+                    mask = layer_activity_mask > th.expand_as(w_init[k])
+            elif th_basis == "activity" and pruning_type == "dynamic":
+                if activity is None:
+                    print("Layer activity not available. Dynamic sparsity not possible")
+                if activity_mask is None:
+                    print("Activity mask is not available. Activity based pruning not possible")
+                if "features" in k:
+                    idx = int(k.split(sep='.')[2])
+                    layer_activity = activity[idx]
+                    layer_activity_mask = activity_mask[idx]
+                    prev = idx
+                elif "classifier" in k:
+                    idx = int(k.split(sep='.')[2]) + prev + 3
+                    if idx in activity.keys():
+                        layer_activity = activity[idx]
+                    else:
+                        layer_activity = sum(activity) / len(activity)
+                    if idx in activity_mask.keys():
+                        layer_activity_mask = activity_mask[idx]
+                    else:
+                        layer_activity_mask = torch.tensor(1)
+                else:
+                    print("Unknown Layer!")
+                s = 100*(1 - layer_activity/activity_multiplier)
+                if layer_activity_mask.shape == torch.Size([]):
+                    th = percentile(torch.abs(delta_w_locals[0][k]), s)
+                    th = torch.FloatTensor([th]).cuda()
+                    mask = torch.abs(delta_w_locals[0][k]) > th.expand_as(w_init[k])
+                else:
+                    th = percentile(layer_activity_mask, s)
+                    th = torch.FloatTensor([th]).cuda()
+                    mask = layer_activity_mask > th.expand_as(w_init[k])
+            else:
+                print("Unknown threshold basis or pruning_type. Available options: th_basis - magnitude or activity, pruning_type - uniform or dynamic")
             sparse_delta_w_locals[0][k] = delta_w_locals[0][k] * mask
             delta_w_avg[k] = (delta_w_locals[0][k] * mask)
         for k in w_init.keys():
             for i in range(1, len(delta_w_locals)):
-                th = percentile(torch.abs(delta_w_locals[i][k]), sparsity)
-                th = torch.FloatTensor([th]).cuda()
-                mask = torch.abs(delta_w_locals[i][k]) > th.expand_as(w_init[k])
+                # Threshold Calculation
+                if th_basis == "magnitude" and pruning_type == "uniform":
+                    th = percentile(torch.abs(delta_w_locals[i][k]), sparsity)
+                    th = torch.FloatTensor([th]).cuda()
+                    mask = torch.abs(delta_w_locals[i][k]) > th.expand_as(w_init[k])
+                elif th_basis == "magnitude" and pruning_type == "dynamic":
+                    if activity is None:
+                        print("Layer activity not available. Dynamic sparsity not possible")
+                    if "features" in k:
+                        idx = int(k.split(sep='.')[2])
+                        layer_activity = activity[idx]
+                        prev = idx
+                    elif "classifier" in k:
+                        idx = int(k.split(sep='.')[2]) + prev + 3
+                        if idx in activity.keys():
+                            layer_activity = activity[idx]
+                        else:
+                            layer_activity = sum(activity) / len(activity)
+                    else:
+                        print("Unknown Layer!")
+                    s = 100*(1 - layer_activity/activity_multiplier)
+                    print("sparsity", s)
+                    th = percentile(torch.abs(delta_w_locals[i][k]), s)
+                    print("Threshold", th)
+                    th = torch.FloatTensor([th]).cuda()
+                    mask = torch.abs(delta_w_locals[i][k]) > th.expand_as(w_init[k])
+                elif th_basis == "activity" and pruning_type == "uniform":
+                    if activity_mask is None:
+                        print("Activity mask is not available. Activity based pruning not possible")
+                    if "features" in k:
+                        idx = int(k.split(sep='.')[2])
+                        layer_activity_mask = activity_mask[idx]
+                        prev = idx
+                    elif "classifier" in k:
+                        idx = int(k.split(sep='.')[2]) + prev + 3
+                        if idx in activity_mask.keys():
+                            layer_activity_mask = activity_mask[idx]
+                        else:
+                            layer_activity_mask = torch.tensor(1)
+                    else:
+                        print("Unknown Layer!")
+                    if layer_activity_mask.shape == torch.Size([]):
+                        th = percentile(torch.abs(delta_w_locals[i][k]), sparsity)
+                        th = torch.FloatTensor([th]).cuda()
+                        mask = torch.abs(delta_w_locals[i][k]) > th.expand_as(w_init[k])
+                    else:
+                        th = percentile(layer_activity_mask, sparsity)
+                        th = torch.FloatTensor([th]).cuda()
+                        mask = layer_activity_mask > th.expand_as(w_init[k])
+                elif th_basis == "activity" and pruning_type == "dynamic":
+                    if activity is None:
+                        print("Layer activity not available. Dynamic sparsity not possible")
+                    if activity_mask is None:
+                        print("Activity mask is not available. Activity based pruning not possible")
+                    if "features" in k:
+                        idx = int(k.split(sep='.')[2])
+                        layer_activity = activity[idx]
+                        layer_activity_mask = activity_mask[idx]
+                        prev = idx
+                    elif "classifier" in k:
+                        idx = int(k.split(sep='.')[2]) + prev + 3
+                        if idx in activity.keys():
+                            layer_activity = activity[idx]
+                        else:
+                            layer_activity = sum(activity) / len(activity)
+                        if idx in activity_mask.keys():
+                            layer_activity_mask = activity_mask[idx]
+                        else:
+                            layer_activity_mask = torch.tensor(1)
+                    else:
+                        print("Unknown Layer!")
+                    s = 100*(1 - layer_activity/activity_multiplier)
+                    if layer_activity_mask.shape == torch.Size([]):
+                        th = percentile(torch.abs(delta_w_locals[i][k]), s)
+                        th = torch.FloatTensor([th]).cuda()
+                        mask = torch.abs(delta_w_locals[i][k]) > th.expand_as(w_init[k])
+                    else:
+                        th = percentile(layer_activity_mask, s)
+                        th = torch.FloatTensor([th]).cuda()
+                        mask = layer_activity_mask > th.expand_as(w_init[k])
+                else:
+                    print("Unknown threshold basis or pruning_type. Available options: th_basis - magnitude or activity, pruning_type - uniform or dynamic")
                 sparse_delta_w_locals[i][k] = delta_w_locals[i][k] * mask
-                delta_w_avg[k] += (delta_w_locals[i][k] * mask)
+                delta_w_avg[k] = (delta_w_locals[i][k] * mask)
             delta_w_avg[k] = torch.div(delta_w_avg[k], len(delta_w_avg))
             w_avg[k] = w_init[k] + delta_w_avg[k]
         return w_avg, delta_w_avg, sparse_delta_w_locals

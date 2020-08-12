@@ -58,8 +58,9 @@ def args_parser():
     parser.add_argument('--result_dir', type=str, default="results", help="Directory to store results")
     parser.add_argument('--snn', action='store_true', help="Whether to train SNN or ANN")
     parser.add_argument('--train_acc_batches', default=200, type=int, help='print training progress after this many batches')
+    parser.add_argument('--sparsity_basis', type=str, default="magnitude", help="On what basis we are calculating the mask. Options - magnitude or activity. Default is magnitude based")
+    parser.add_argument('--pruning_type', type=str, default="uniform", help="Pruning type uniform or dynamic. Uniform has constant specified sparsity for every layer. Dynamic has different sparsity in each layer based on activity")
     parser.add_argument('--grad_sparsity', type=float, default=0.0, help="Gradient Sparsity")
-    parser.add_argument('--activity_based_sparsity', action='store_true', help="Whether to have activity based sparsity or constant sparsity")
     parser.add_argument('--activity_multiplier', type=float, default=1.0, help="Strength of activity based threshold. Eg: If this is 2 we send top activity/2 percent of gradients in every update. Generally activity will be around 3-4% so to get a sparsity of ~99.9 percent we need 4/0.1 = 40")
     args = parser.parse_args()
     return args

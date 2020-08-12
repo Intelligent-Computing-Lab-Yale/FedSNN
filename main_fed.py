@@ -67,44 +67,54 @@ class SubsetLoaderCIFAR100(datasets.CIFAR100):
 def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batches = 10):
     loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
     activity = []
+    activity_mask = []
     pos=0
-
+    
     def find(layer, pos):
         print('Finding activity for layer {}'.format(layer))
         tot_spikes = 0.0
         nz_spikes = 0.0
+        tot_activity_mask = None
         for batch_idx, (data, target) in enumerate(loader):
+            
             data, target = data.cuda(), target.cuda()
 
             with torch.no_grad():
                 net_glob.eval()
-                tot_spikes_, nz_spikes_ = net_glob(data, find_activity=True, activity_layer=layer)
+                tot_spikes_, nz_spikes_, activity_mask_ = net_glob(data, find_activity=True, activity_layer=layer)
                 tot_spikes += tot_spikes_
                 nz_spikes += nz_spikes_
-                if batch_idx==num_batches - 1:
+                if tot_activity_mask == None:
+                    tot_activity_mask = activity_mask_
+                else:
+                    tot_activity_mask += activity_mask_
+                if batch_idx==(num_batches - 1):
                     activity.append(nz_spikes/tot_spikes)
+                    activity_mask.append(tot_activity_mask)
                     pos = pos+1
                     print(' {}'.format(activity))
                     break
         return pos
 
-    if architecture.lower().startswith('vgg'):
-        for l in net_glob.features.named_children():
+    if architecture.lower().startswith('vgg'):                                     
+        for l in net_glob.features.named_children():                           
             if isinstance(l[1], nn.Conv2d):
                 pos = find(int(l[0]), pos)
-        for c in net_glob.classifier.named_children():
-            if isinstance(c[1], nn.Linear):
-                if (int(l[0])+int(c[0])+1) == (len(net_glob.features) + len(net_glob.classifier) -1):
+            
+        for c in net_glob.classifier.named_children():                         
+            if isinstance(c[1], nn.Linear):                                        
+                if (int(l[0])+int(c[0])+1) == (len(net_glob.features) + len(net_glob.classifier) -1):       
                     pass
                 else:
-                    pos = find(int(l[0])+int(c[0])+1, pos)
-
-    if architecture.lower().startswith('res'):
-        for l in net_glob.pre_process.named_children():
-            if isinstance(l[1], nn.Conv2d):
+                    pos = find(int(l[0])+int(c[0])+1, pos)                         
+                    
+    if architecture.lower().startswith('res'):                                     
+        for l in net_glob.pre_process.named_children():                        
+            if isinstance(l[1], nn.Conv2d):                                        
                 pos = find(int(l[0]), pos)
     print('Spike activity: {}'.format(activity))
-    return activity
+    return activity, activity_mask
+
 
 def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
     loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
@@ -242,7 +252,7 @@ if __name__ == '__main__':
         if args.snn:
             thresholds = find_threshold(batch_size=512, timesteps=1000, architecture = args.model)
             net_glob.threshold_update(scaling_factor = args.scaling_factor, thresholds = thresholds[:])
-            activity = find_activity(batch_size=512, timesteps=1000, architecture = args.model, num_batches = 20)
+            activity, activity_mask = find_activity(batch_size=512, timesteps=1000, architecture = args.model, num_batches = 20)
             net_glob.activity_update(activity = activity[:])
 
     net_glob = nn.DataParallel(net_glob)
@@ -312,22 +322,23 @@ if __name__ == '__main__':
             for k in w_init.keys():
                 delta_w[k] = w_locals[i][k] - w_init[k]
             delta_w_locals.append(delta_w)
-        if args.snn and args.activity_based_sparsity:
+        if args.snn:
             activity = net_glob.module.activity
         else:
             activity = None
-        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, sparsity = args.grad_sparsity, activity = activity, activity_multiplier = args.activity_multiplier)
-
+            activity_mask = None
+        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, th_basis = args.sparsity_basis, pruning_type = args.pruning_type, sparsity = args.grad_sparsity, activity = activity, activity_multiplier = args.activity_multiplier, activity_mask = activity_mask)
+ 
         comm_cost, nz_grad = fl.count_gradients(delta_w_locals, sparse_delta_w_locals)
-
+ 
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
-
+ 
         # print loss
         loss_avg = sum(loss_locals) / len(loss_locals)
         print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
         loss_train_list.append(loss_avg)
-
+ 
         if iter % args.eval_every == 0:
             # testing
             net_glob.eval()
@@ -335,13 +346,13 @@ if __name__ == '__main__':
             acc_test, loss_test = test_img(net_glob, dataset_test, args)
             print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
             print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
-
+ 
             # Add metrics to store
             ms_acc_train_list.append(acc_train)
             ms_acc_test_list.append(acc_test)
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
-
+ 
             # print communication cost
             tot_comm_cost = sum(comm_cost)
             avg_comm_cost = sum(comm_cost) / len(comm_cost)
@@ -351,7 +362,7 @@ if __name__ == '__main__':
             ms_tot_comm_cost_list.append(tot_comm_cost)
             ms_avg_comm_cost_list.append(avg_comm_cost)
             ms_max_comm_cost_list.append(max_comm_cost)
-
+ 
             tot_nz_grad = sum(nz_grad)
             avg_nz_grad = sum(nz_grad) / len(nz_grad)
             max_nz_grad = max(nz_grad)
@@ -359,7 +370,7 @@ if __name__ == '__main__':
             ms_tot_nz_grad_list.append(tot_nz_grad)
             ms_avg_nz_grad_list.append(avg_nz_grad)
             ms_max_nz_grad_list.append(max_nz_grad)
-
+ 
         if iter in lr_interval:
             args.lr = args.lr/args.lr_reduce
 
