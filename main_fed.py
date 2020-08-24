@@ -200,7 +200,7 @@ if __name__ == '__main__':
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
             exit('Error: only consider IID setting in CIFAR10')
-    elif args.dataset == 'cifar100':
+    elif args.dataset == 'CIFAR100':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         dataset_train = SubsetLoaderCIFAR100('../data/cifar100', train=True, download=True, transform=trans_cifar)
         dataset_test = SubsetLoaderCIFAR100('../data/cifar100', train=False, download=True, transform=trans_cifar)
@@ -216,11 +216,11 @@ if __name__ == '__main__':
     # build model
     model_args = {'args': args}
     if args.snn:
-        if args.dataset == 'CIFAR10':
+        if args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100':
             if args.model[0:3].lower() == 'vgg':
                 model_args = {'vgg_name': args.model, 'activation': args.activation, 'labels': args.num_classes, 'timesteps': args.timesteps, 'leak': args.leak, 'default_threshold': args.default_threshold, 'alpha': args.alpha, 'beta': args.beta, 'dropout': args.dropout, 'kernel_size': args.snn_kernel_size, 'dataset': args.dataset}
                 net_glob = snn_models.VGG_SNN_STDB(**model_args).cuda()
-    elif args.dataset == 'CIFAR10' and args.model[0:3].lower() == 'vgg':
+    elif (args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100') and args.model[0:3].lower() == 'vgg':
         model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
         net_glob = snn_models.VGG(**model_args).cuda()
     elif args.dataset == 'CIFAR10':
