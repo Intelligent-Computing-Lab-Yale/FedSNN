@@ -40,7 +40,12 @@ class LocalUpdate(object):
     def train(self, net):
         net.train()
         # train and update
-        optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=0.5)
+        if self.args.optimizer == "SGD":
+            optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=0.5)
+        elif self.args.optimizer == "Adam":
+            optimizer = torch.optim.Adam(net.parameters(), lr = self.args.lr, weight_decay = self.args.weight_decay)
+        else:
+            print("Invalid optimizer")
 
         epoch_loss = []
         for iter in range(self.args.local_ep):
