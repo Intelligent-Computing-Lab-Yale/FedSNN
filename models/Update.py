@@ -9,18 +9,10 @@ import numpy as np
 import random
 from sklearn import metrics
 
-
 class DatasetSplit(Dataset):
-    def __init__(self, dataset, idxs, part = "full"):
+    def __init__(self, dataset, idxs):
         self.dataset = dataset
-        if part == "full":
-            self.idxs = list(idxs)
-        elif part == "first":
-            self.idxs = list(idxs)[0::2] # Sample even indexed data
-        elif part == "second":
-            self.idxs = list(idxs)[1::2] # Sample only odd indexed data
-        else:
-            exit("Part invalid")
+        self.idxs = list(idxs)
 
     def __len__(self):
         return len(self.idxs)
@@ -29,21 +21,20 @@ class DatasetSplit(Dataset):
         image, label = self.dataset[self.idxs[item]]
         return image, label
 
-
 class LocalUpdate(object):
     def __init__(self, args, dataset=None, idxs=None):
         self.args = args
         self.loss_func = nn.CrossEntropyLoss()
         self.selected_clients = []
-        self.ldr_train = DataLoader(DatasetSplit(dataset, idxs, part=args.part), batch_size=self.args.local_bs, shuffle=True)
+        self.ldr_train = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
 
     def train(self, net):
         net.train()
         # train and update
         if self.args.optimizer == "SGD":
-            optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=0.5)
+            optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=self.args.momentum)
         elif self.args.optimizer == "Adam":
-            optimizer = torch.optim.Adam(net.parameters(), lr = self.args.lr, weight_decay = self.args.weight_decay)
+            optimizer = torch.optim.Adam(net.parameters(), lr = self.args.lr, weight_decay = self.args.weight_decay, amsgrad = True)
         else:
             print("Invalid optimizer")
 

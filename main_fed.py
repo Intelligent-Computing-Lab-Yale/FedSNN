@@ -64,6 +64,17 @@ class SubsetLoaderCIFAR100(datasets.CIFAR100):
         self.data = self.data[mask]
         self.targets = labels[mask]
 
+def partition_dataset(dataset, part = "full"):
+    if part == "full":
+        return dataset
+    elif part == "first":
+        dataset.data = dataset.data[0::2]
+        dataset.targets = dataset.targets[0::2]
+    elif part == "second":
+        dataset.data = dataset.data[1::2]
+        dataset.targets = dataset.targets[1::2]
+    return dataset
+
 def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batches = 10):
     loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
     activity = []
