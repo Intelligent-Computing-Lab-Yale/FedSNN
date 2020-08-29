@@ -11,7 +11,7 @@ def args_parser():
     parser.add_argument('--num_users', type=int, default=100, help="number of users: K")
     parser.add_argument('--frac', type=float, default=0.1, help="the fraction of clients: C")
     parser.add_argument('--local_ep', type=int, default=5, help="the number of local epochs: E")
-    parser.add_argument('--local_bs', type=int, default=64, help="local batch size: B")
+    parser.add_argument('--local_bs', type=int, default=16, help="local batch size: B")
     parser.add_argument('--bs', type=int, default=16, help="test batch size")
     parser.add_argument('--lr', type=float, default=1e-4, help="learning rate")
     parser.add_argument('--lr_interval', default='0.60 0.80 0.90', type=str, help='intervals at which to reduce lr, expressed as %%age of total epochs')
@@ -29,7 +29,7 @@ def args_parser():
     parser.add_argument('--weight_decay', default=5e-4, type=float, help='weight decay parameter for the optimizer')
     parser.add_argument('--dropout', default=0.3, type=float, help='dropout percentage for conv layers')
 
-    parser.add_argument('--momentum', type=float, default=0.5, help="SGD momentum (default: 0.5)")
+    parser.add_argument('--momentum', type=float, default=0.95, help="SGD momentum (default: 0.5)")
     parser.add_argument('--split', type=str, default='user', help="train-test split type, user or sample")
 
     # model arguments
