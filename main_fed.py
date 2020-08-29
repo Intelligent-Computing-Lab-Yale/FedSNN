@@ -13,7 +13,7 @@ from torchvision import datasets, transforms
 import torch
 import torch.nn as nn
 
-from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
+from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
 from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
@@ -207,18 +207,22 @@ if __name__ == '__main__':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         dataset_train = SubsetLoaderCIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar, exclude_list=exclude_list)
         dataset_test = SubsetLoaderCIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar, exclude_list=exclude_list)
+        dataset_train = partition_dataset(dataset_train, args.part)
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
-            exit('Error: only consider IID setting in CIFAR10')
+            dict_users = cifar_non_iid(dataset_train, args.num_classes, args.num_users)
+            #exit('Error: only consider IID setting in CIFAR10')
     elif args.dataset == 'CIFAR100':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         dataset_train = SubsetLoaderCIFAR100('../data/cifar100', train=True, download=True, transform=trans_cifar)
         dataset_test = SubsetLoaderCIFAR100('../data/cifar100', train=False, download=True, transform=trans_cifar)
+        dataset_train = partition_dataset(dataset_train, args.part)
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
-            exit('Error: only consider IID setting in CIFAR10')
+            dict_users = cifar_non_iid(dataset_train, args.num_classes, args.num_users)
+            #exit('Error: only consider IID setting in CIFAR10')
 
     else:
         exit('Error: unrecognized dataset')
