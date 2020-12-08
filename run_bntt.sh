@@ -1,0 +1,1 @@
+python main_fed.py --dataset CIFAR10 --num_classes 10 --model VGG5 --optimizer SGD --bs 32 --local_bs 32 --lr 0.1 --lr_reduce 5 --epochs 100 --local_ep 1 --eval_every 1 --num_users 1 --frac 1 --gpu 0 --snn --bntt --timesteps 20 --result_dir ./test_bntt

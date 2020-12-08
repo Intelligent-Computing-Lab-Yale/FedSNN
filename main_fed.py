@@ -21,6 +21,7 @@ from models.Fed import FedLearn
 from models.test import test_img
 import pytorch_cifar.models as pcm
 import hybrid_snn_conversion.self_models as snn_models
+import models.vgg_spiking_bntt as snn_models_bntt
 
 class SubsetLoaderMNIST(datasets.MNIST):
     def __init__(self, *args, exclude_list=[], **kwargs):
@@ -68,11 +69,13 @@ def partition_dataset(dataset, part = "full"):
     if part == "full":
         return dataset
     elif part == "first":
-        dataset.data = dataset.data[0::2]
-        dataset.targets = dataset.targets[0::2]
+        dataset.data = dataset.data[0::5]
+        dataset.targets = dataset.targets[0::5]
     elif part == "second":
-        dataset.data = dataset.data[1::2]
-        dataset.targets = dataset.targets[1::2]
+        #dataset.data = dataset.data[1::5] + dataset.data[2::5] + dataset.data[3::5] + dataset.data[4::5]
+        dataset.data = np.concatenate((dataset.data[1::5], dataset.data[2::5], dataset.data[3::5], dataset.data[4::5]), axis=0)
+        dataset.targets = dataset.targets[1::5] + dataset.targets[2::5] + dataset.targets[3::5] + dataset.targets[4::5]
+    print("Data part size", len(dataset.data), len(dataset.targets))
     return dataset
 
 def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batches = 10):
@@ -92,16 +95,19 @@ def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batch
 
             with torch.no_grad():
                 net_glob.eval()
-                tot_spikes_, nz_spikes_, activity_mask_ = net_glob(data, find_activity=True, activity_layer=layer)
+                # tot_spikes_, nz_spikes_, activity_mask_ = net_glob(data, find_activity=True, activity_layer=layer)
+                tot_spikes_, nz_spikes_ = net_glob(data, find_activity=True, activity_layer=layer)
                 tot_spikes += tot_spikes_
                 nz_spikes += nz_spikes_
+                """
                 if tot_activity_mask == None:
                     tot_activity_mask = activity_mask_
                 else:
                     tot_activity_mask += activity_mask_
+                """
                 if batch_idx==(num_batches - 1):
                     activity.append(nz_spikes/tot_spikes)
-                    activity_mask.append(tot_activity_mask)
+                    # activity_mask.append(tot_activity_mask)
                     pos = pos+1
                     print(' {}'.format(activity))
                     break
@@ -124,7 +130,8 @@ def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batch
             if isinstance(l[1], nn.Conv2d):                                        
                 pos = find(int(l[0]), pos)
     print('Spike activity: {}'.format(activity))
-    return activity, activity_mask
+    # return activity, activity_mask
+    return activity
 
 
 def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
@@ -234,8 +241,12 @@ if __name__ == '__main__':
     if args.snn:
         if args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100':
             if args.model[0:3].lower() == 'vgg':
-                model_args = {'vgg_name': args.model, 'activation': args.activation, 'labels': args.num_classes, 'timesteps': args.timesteps, 'leak': args.leak, 'default_threshold': args.default_threshold, 'alpha': args.alpha, 'beta': args.beta, 'dropout': args.dropout, 'kernel_size': args.snn_kernel_size, 'dataset': args.dataset}
-                net_glob = snn_models.VGG_SNN_STDB(**model_args).cuda()
+                if args.bntt:
+                    model_args = {'num_cls': args.num_classes, 'timesteps': 20}
+                    net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
+                else:
+                    model_args = {'vgg_name': args.model, 'activation': args.activation, 'labels': args.num_classes, 'timesteps': args.timesteps, 'leak': args.leak, 'default_threshold': args.default_threshold, 'alpha': args.alpha, 'beta': args.beta, 'dropout': args.dropout, 'kernel_size': args.snn_kernel_size, 'dataset': args.dataset}
+                    net_glob = snn_models.VGG_SNN_STDB(**model_args).cuda()
     elif (args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100') and args.model[0:3].lower() == 'vgg':
         model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
         net_glob = snn_models.VGG(**model_args).cuda()
@@ -265,10 +276,10 @@ if __name__ == '__main__':
     # copy weights
     if args.pretrained_model:
         net_glob.load_state_dict(torch.load(args.pretrained_model, map_location='cpu'))
-        if args.snn:
+        if args.snn and args.bntt == False:
             thresholds = find_threshold(batch_size=512, timesteps=1000, architecture = args.model)
             net_glob.threshold_update(scaling_factor = args.scaling_factor, thresholds = thresholds[:])
-            activity, activity_mask = find_activity(batch_size=512, timesteps=1000, architecture = args.model, num_batches = 20)
+            activity = find_activity(batch_size=512, timesteps=1000, architecture = args.model, num_batches = 20)
             net_glob.activity_update(activity = activity[:])
 
     net_glob = nn.DataParallel(net_glob)
@@ -310,7 +321,7 @@ if __name__ == '__main__':
 
     for iter in range(args.epochs):
         net_glob.train()
-        if args.snn:
+        if args.snn and args.bntt == False:
             net_glob.module.network_update(timesteps=args.timesteps, leak=args.leak)
         w_locals, loss_locals = [], []
         m = max(int(args.frac * args.num_users), 1)
@@ -319,7 +330,7 @@ if __name__ == '__main__':
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
             print(type(net_glob.module))
             model_copy = type(net_glob.module)(**model_args) # get a new instance
-            if args.snn:
+            if args.snn and args.bntt == False:
                 thresholds = []
                 for value in net_glob.module.threshold.values():
                     thresholds = thresholds + [value.item()]
@@ -330,7 +341,8 @@ if __name__ == '__main__':
             w_locals.append(copy.deepcopy(w))
             loss_locals.append(copy.deepcopy(loss))
         # update global weights
-        # w_glob = fl.FedAvg(w_locals)
+        w_glob = fl.FedAvg(w_locals)
+        """
         w_init = net_glob.state_dict()
         delta_w_locals = []
         for i in range(0, len(w_locals)):
@@ -338,15 +350,15 @@ if __name__ == '__main__':
             for k in w_init.keys():
                 delta_w[k] = w_locals[i][k] - w_init[k]
             delta_w_locals.append(delta_w)
-        if args.snn:
+        if args.snn and args.bntt == False:
             activity = net_glob.module.activity
         else:
             activity = None
             activity_mask = None
-        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, th_basis = args.sparsity_basis, pruning_type = args.pruning_type, sparsity = args.grad_sparsity, activity = activity, activity_multiplier = args.activity_multiplier, activity_mask = activity_mask)
+        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, th_basis = args.sparsity_basis, pruning_type = args.pruning_type, sparsity = args.grad_sparsity, activity = activity, activity_multiplier = args.activity_multiplier)
  
         comm_cost, nz_grad = fl.count_gradients(delta_w_locals, sparse_delta_w_locals)
- 
+        """
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
  
@@ -369,6 +381,7 @@ if __name__ == '__main__':
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
  
+            """
             # print communication cost
             tot_comm_cost = sum(comm_cost)
             avg_comm_cost = sum(comm_cost) / len(comm_cost)
@@ -386,7 +399,7 @@ if __name__ == '__main__':
             ms_tot_nz_grad_list.append(tot_nz_grad)
             ms_avg_nz_grad_list.append(avg_nz_grad)
             ms_max_nz_grad_list.append(max_nz_grad)
- 
+            """
         if iter in lr_interval:
             args.lr = args.lr/args.lr_reduce
 
@@ -432,12 +445,12 @@ if __name__ == '__main__':
     comm_metrics_df = pd.DataFrame(
         {
             'num_clients': ms_num_client_list,
-            'tot_comm_cost': ms_tot_comm_cost_list,
-            'avg_comm_cost': ms_avg_comm_cost_list,
-            'max_comm_cost': ms_max_comm_cost_list,
-            'tot_nz_grad': ms_tot_nz_grad_list,
-            'avg_nz_grad': ms_avg_nz_grad_list,
-            'max_nz_grad': ms_max_nz_grad_list
+            #'tot_comm_cost': ms_tot_comm_cost_list,
+            #'avg_comm_cost': ms_avg_comm_cost_list,
+            #'max_comm_cost': ms_max_comm_cost_list,
+            #'tot_nz_grad': ms_tot_nz_grad_list,
+            #'avg_nz_grad': ms_avg_nz_grad_list,
+            #'max_nz_grad': ms_max_nz_grad_list
         })
     comm_metrics_df.to_csv('./{}/fed_comm_stats_{}_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 

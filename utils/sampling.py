@@ -68,6 +68,7 @@ def cifar_iid(dataset, num_users):
 def cifar_non_iid(dataset, num_classes, num_users, alpha = 0.5):
     N = len(dataset)
     min_size = 0
+    print("Dataset size:", N)
 
     dict_users = {}
     while min_size < 10:
