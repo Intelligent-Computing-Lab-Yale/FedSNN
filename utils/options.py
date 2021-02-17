@@ -44,8 +44,6 @@ def args_parser():
 
     # other arguments
     parser.add_argument('--dataset', type=str, default='mnist', help="name of dataset")
-    parser.add_argument('--subset', type=str, default='full', help="Data subset based on classes - full/odd/even")
-    parser.add_argument('--part', type=str, default='full', help="Data subt based on index - full/first/second. first:even indexed data, second:even indexed data") # First and second to avoid odd and even confusion
     parser.add_argument('--iid', action='store_true', help='whether i.i.d or not')
     parser.add_argument('--num_classes', type=int, default=10, help="number of classes")
     parser.add_argument('--num_channels', type=int, default=3, help="number of channels of imges")
@@ -57,11 +55,8 @@ def args_parser():
     parser.add_argument('--pretrained_model', type=str, default=None, help="Path for the pre-trained mode if any")
     parser.add_argument('--result_dir', type=str, default="results", help="Directory to store results")
     parser.add_argument('--snn', action='store_true', help="Whether to train SNN or ANN")
-    parser.add_argument('--bntt', action='store_true', help="Flag to train with BNTT algorithm")
     parser.add_argument('--train_acc_batches', default=200, type=int, help='print training progress after this many batches')
-    parser.add_argument('--sparsity_basis', type=str, default="magnitude", help="On what basis we are calculating the mask. Options - magnitude or activity. Default is magnitude based")
-    parser.add_argument('--pruning_type', type=str, default="uniform", help="Pruning type uniform or dynamic. Uniform has constant specified sparsity for every layer. Dynamic has different sparsity in each layer based on activity")
-    parser.add_argument('--grad_sparsity', type=float, default=0.0, help="Gradient Sparsity")
-    parser.add_argument('--activity_multiplier', type=float, default=1.0, help="Strength of activity based threshold. Eg: If this is 2 we send top activity/2 percent of gradients in every update. Generally activity will be around 3-4% so to get a sparsity of ~99.9 percent we need 4/0.1 = 40")
+    parser.add_argument('--straggler_prob', type=float, default=0.0, help="straggler probability")
+    parser.add_argument('--grad_noise_stdev', type=float, default=0.0, help="Noise level for gradients")
     args = parser.parse_args()
     return args
