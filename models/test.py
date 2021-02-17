@@ -32,3 +32,23 @@ def test_img(net_g, datatest, args):
             test_loss, correct, len(data_loader.dataset), accuracy))
     return accuracy.item(), test_loss
 
+def comp_activity(net_g, dataset, args):
+    net_g.eval()
+    # testing
+    data_loader = DataLoader(dataset, batch_size=args.bs)
+    l = len(data_loader)
+    for idx, (data, target) in enumerate(data_loader):
+        if args.gpu != -1:
+            data, target = data.cuda(), target.cuda()
+        activity = torch.zeros(net_g(data, count_active_layers = True))
+        break
+    batch_count = 0
+    for idx, (data, target) in enumerate(data_loader):
+        if args.gpu != -1:
+            data, target = data.cuda(), target.cuda()
+        activity += torch.tensor(net_g(data, report_activity = True))
+        # sum up batch loss
+        batch_count += 1
+    activity = activity/batch_count
+
+    return activity
