@@ -20,6 +20,10 @@ from torch.autograd import Variable
 # This class is replicated from:
 # https://github.com/fzenke/spytorch/blob/master/notebooks/SpyTorchTutorial2.ipynb
 # --------------------------------------------------
+
+# Note: Only VGG9 is supported currently
+# To Do: Make a generic design for all VGG models
+
 class SuperSpike(torch.autograd.Function):
     """
     Here we implement our spiking nonlinearity which also implements
@@ -207,9 +211,10 @@ def PoissonGen(inp, rescale_fac=2.0):
 class SNN_VGG9_TBN(nn.Module):
     def __init__(self, dt=0.001, t_end=0.100, inp_rate=100, grad_type='Linear', thresh_init_wnorm=False,
                  leak_mem=0.99, img_size=32, inp_maps=3, c1_maps=64, c2_maps=64, ksize=3, fc0_size=200,
-                 num_cls=1000, drop_rate=0.5, use_max_out_over_time=False, timesteps = 20):
+                 num_cls=1000, drop_rate=0.5, use_max_out_over_time=False, timesteps = 20, dvs = False):
         super(SNN_VGG9_TBN, self).__init__()
 
+        self.dvs = dvs
         # ConvSNN architecture parameters
         self.img_size = img_size
         self.inp_maps = inp_maps
@@ -251,7 +256,7 @@ class SNN_VGG9_TBN(nn.Module):
         affine_flag = True
         bias_flag = False
         # Instantiate the ConvSNN layers
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=bias_flag)
+        self.conv1 = nn.Conv2d(self.inp_maps, 64, kernel_size=3, stride=1, padding=1, bias=bias_flag)
         self.bn1_list = nn.ModuleList([nn.BatchNorm2d(64, eps=1e-4, momentum=0.1, affine=affine_flag) for i in range(self.batch_num)])
         self.conv1_1 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=bias_flag)
         self.bn1_1_list = nn.ModuleList([nn.BatchNorm2d(64, eps=1e-4, momentum=0.1, affine=affine_flag) for i in range(self.batch_num)])
@@ -338,6 +343,8 @@ class SNN_VGG9_TBN(nn.Module):
 
         for t in range(self.num_steps):
             spike_inp = PoissonGen(inp)
+            if self.dvs:
+                spike_inp = inp[:, t, ...]
             # # spike_x = torch.cat([spike_inp]*22,1)[:,:64,:,:]
             # out_prev = spike_inp
             #
@@ -469,7 +476,7 @@ class SNN_VGG9_TBN(nn.Module):
 class SNN_VGG16_TBN(nn.Module):
     def __init__(self, dt=0.001, t_end=0.100, inp_rate=100, grad_type='Linear', thresh_init_wnorm=False,
                  leak_mem=0.99, img_size=32, inp_maps=3, c1_maps=64, c2_maps=64, ksize=3, fc0_size=200,
-                 num_cls=1000, drop_rate=0.5, use_max_out_over_time=False):
+                 num_cls=1000, drop_rate=0.5, use_max_out_over_time=False, timesteps = 20):
         super(SNN_VGG16_TBN, self).__init__()
 
         # ConvSNN architecture parameters
@@ -489,7 +496,8 @@ class SNN_VGG16_TBN(nn.Module):
         # ConvSNN simulation parameters
         self.dt = dt
         self.t_end = t_end
-        self.num_steps = int(self.t_end / self.dt)
+        # self.num_steps = int(self.t_end / self.dt)
+        self.num_steps = timesteps
         self.inp_rate = inp_rate
         self.inp_rescale_fac = 1.0 / (self.dt * self.inp_rate)
         self.grad_type = grad_type
