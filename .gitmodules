@@ -1,6 +1,0 @@
-[submodule "hybrid_snn_conversion"]
-	path = hybrid_snn_conversion
-	url = https://github.com/yeshwanthv5/hybrid-snn-conversion.git
-[submodule "pytorch_cifar"]
-	path = pytorch_cifar
-	url = https://github.com/yeshwanthv5/pytorch-cifar
