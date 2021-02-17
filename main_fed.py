@@ -170,7 +170,6 @@ if __name__ == '__main__':
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
         for idx in idxs_users:
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
-            print(type(net_glob.module))
             model_copy = type(net_glob.module)(**model_args) # get a new instance
             model_copy = nn.DataParallel(model_copy)
             model_copy.load_state_dict(net_glob.state_dict()) # copy weights and stuff
@@ -244,21 +243,9 @@ if __name__ == '__main__':
         })
     metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
-    comm_metrics_df = pd.DataFrame(
-        {
-            'num_clients': ms_num_client_list,
-            #'tot_comm_cost': ms_tot_comm_cost_list,
-            #'avg_comm_cost': ms_avg_comm_cost_list,
-            #'max_comm_cost': ms_max_comm_cost_list,
-            #'tot_nz_grad': ms_tot_nz_grad_list,
-            #'avg_nz_grad': ms_avg_nz_grad_list,
-            #'max_nz_grad': ms_max_nz_grad_list
-        })
-    comm_metrics_df.to_csv('./{}/fed_comm_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
-
     # Print model's state_dict
-    print("Model's state_dict:")
-    for param_tensor in net_glob.state_dict():
-        print(param_tensor, "\t", net_glob.state_dict()[param_tensor].size())
+    # print("Model's state_dict:")
+    # for param_tensor in net_glob.state_dict():
+    #     print(param_tensor, "\t", net_glob.state_dict()[param_tensor].size())
 
     torch.save(net_glob.module.state_dict(), './{}/saved_model'.format(args.result_dir))
