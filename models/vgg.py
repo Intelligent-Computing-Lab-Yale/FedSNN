@@ -10,7 +10,7 @@ import math
 
 cfg = {
     'VGG5' : [64, 'A', 128, 128, 'A'],
-    'VGG9':  [64, 'A', 128, 256, 'A', 256, 512, 'A', 512, 'A', 512],
+    'VGG9':  [64, 'A', 64, 128, 'A', 128, 256, 'A', 256, 'A', 256],
     'VGG11': [64, 'A', 128, 256, 'A', 512, 512, 'A', 512, 'A', 512, 512],
     'VGG13': [64, 64, 'A', 128, 128, 'A', 256, 256, 'A', 512, 512, 512, 'A', 512],
     'VGG16': [64, 64, 'A', 128, 128, 'A', 256, 256, 256, 'A', 512, 512, 512, 'A', 512, 512, 512],
@@ -38,7 +38,7 @@ class VGG(nn.Module):
                             )
         elif vgg_name!='VGG5' and dataset!='MNIST':
             self.classifier = nn.Sequential(
-                            nn.Linear(512*2*2, 4096, bias=False),
+                            nn.Linear(256*2*2, 4096, bias=False),
                             nn.ReLU(inplace=True),
                             nn.Dropout(0.5),
                             nn.Linear(4096, 4096, bias=False),
@@ -106,8 +106,9 @@ class VGG(nn.Module):
                 layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
             else:
                 layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
-                           nn.ReLU(inplace=True)
-                           ]
+                        nn.BatchNorm2d(x),
+                        nn.ReLU(inplace=True)
+                        ]
                 layers += [nn.Dropout(self.dropout)]
                 in_channels = x
 
