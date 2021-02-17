@@ -16,66 +16,10 @@ import torch.nn as nn
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
-from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
 from models.Fed import FedLearn
 from models.test import test_img
 import models.vgg as ann_models
 import models.vgg_spiking_bntt as snn_models_bntt
-
-def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batches = 10):
-    loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
-    activity = []
-    activity_mask = []
-    pos=0
-    
-    def find(layer, pos):
-        print('Finding activity for layer {}'.format(layer))
-        tot_spikes = 0.0
-        nz_spikes = 0.0
-        tot_activity_mask = None
-        for batch_idx, (data, target) in enumerate(loader):
-            
-            data, target = data.cuda(), target.cuda()
-
-            with torch.no_grad():
-                net_glob.eval()
-                # tot_spikes_, nz_spikes_, activity_mask_ = net_glob(data, find_activity=True, activity_layer=layer)
-                tot_spikes_, nz_spikes_ = net_glob(data, find_activity=True, activity_layer=layer)
-                tot_spikes += tot_spikes_
-                nz_spikes += nz_spikes_
-                """
-                if tot_activity_mask == None:
-                    tot_activity_mask = activity_mask_
-                else:
-                    tot_activity_mask += activity_mask_
-                """
-                if batch_idx==(num_batches - 1):
-                    activity.append(nz_spikes/tot_spikes)
-                    # activity_mask.append(tot_activity_mask)
-                    pos = pos+1
-                    print(' {}'.format(activity))
-                    break
-        return pos
-
-    if architecture.lower().startswith('vgg'):                                     
-        for l in net_glob.features.named_children():                           
-            if isinstance(l[1], nn.Conv2d):
-                pos = find(int(l[0]), pos)
-            
-        for c in net_glob.classifier.named_children():                         
-            if isinstance(c[1], nn.Linear):                                        
-                if (int(l[0])+int(c[0])+1) == (len(net_glob.features) + len(net_glob.classifier) -1):       
-                    pass
-                else:
-                    pos = find(int(l[0])+int(c[0])+1, pos)                         
-                    
-    if architecture.lower().startswith('res'):                                     
-        for l in net_glob.pre_process.named_children():                        
-            if isinstance(l[1], nn.Conv2d):                                        
-                pos = find(int(l[0]), pos)
-    print('Spike activity: {}'.format(activity))
-    # return activity, activity_mask
-    return activity
 
 if __name__ == '__main__':
     # parse args
@@ -242,10 +186,5 @@ if __name__ == '__main__':
             'Test loss': ms_loss_test_list
         })
     metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
-
-    # Print model's state_dict
-    # print("Model's state_dict:")
-    # for param_tensor in net_glob.state_dict():
-    #     print(param_tensor, "\t", net_glob.state_dict()[param_tensor].size())
 
     torch.save(net_glob.module.state_dict(), './{}/saved_model'.format(args.result_dir))
