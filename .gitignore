@@ -52,3 +52,4 @@ ENV/
 CIFAR*
 cifar*
 *results*
+test/

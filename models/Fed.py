@@ -4,6 +4,7 @@
 
 import copy
 import torch
+import random
 from torch import nn
 from typing import Union
 
@@ -29,12 +30,27 @@ class FedLearn(object):
     def __init__(self, args):
         self.args = args
 
-    def FedAvg(self, w):
-        w_avg = copy.deepcopy(w[0])
+    def FedAvg(self, w, w_init = None):
+        non_stragglers = [1]*len(w)
+        for i in range(1, len(w)):
+            epsilon = random.uniform(0, 1)
+            if epsilon < self.args.straggler_prob:
+                non_stragglers[i] = 0
+        w_avg = copy.deepcopy(w[0]) 
+        for k in w_avg.keys():
+            if w_init:
+                w_avg[k] = w_avg[k] + torch.mean(torch.abs(w_init[k] - w[0][k])*1.0) * torch.randn(w[0][k].size()) * self.args.grad_noise_stdev # Scale the noise by mean of the absolute value of the model updates
+            else:
+                w_avg[k] = w_avg[k] + torch.randn(w[0][k].size()) * self.args.grad_noise_stdev # Add gaussian noise to the model updates
         for k in w_avg.keys():
             for i in range(1, len(w)):
-                w_avg[k] += w[i][k]
-            w_avg[k] = torch.div(w_avg[k], len(w))
+                if non_stragglers[i] == 1:
+                    if w_init:
+                        w_avg[k] = w_avg[k] + w[i][k] + torch.mean(torch.abs(w_init[k] - w[i][k])*1.0) * torch.randn(w[i][k].size()) * self.args.grad_noise_stdev # Scale the noise by mean of the absolute value of the model updates
+                        # 1.0 is to convert into float
+                    else:
+                        w_avg[k] = w_avg[k] + w[i][k] + torch.randn(w[i][k].size()) * self.args.grad_noise_stdev # Add gaussian noise to the model updates
+            w_avg[k] = torch.div(w_avg[k], sum(non_stragglers))
         return w_avg
 
     def FedAvgSparse(self, w_init, delta_w_locals, th_basis = "magnitude", pruning_type = "uniform", sparsity = 0, activity = None, activity_multiplier = 1, activity_mask = None):
