@@ -97,6 +97,7 @@ if __name__ == '__main__':
     ms_acc_test_list.append(acc_test)
     ms_loss_train_list.append(loss_train)
     ms_loss_test_list.append(loss_test)
+    ms_sum_grads.append(sum_grads)
 
     # Define LR Schedule
     values = args.lr_interval.split()
@@ -121,7 +122,18 @@ if __name__ == '__main__':
             w_locals.append(copy.deepcopy(w))
             loss_locals.append(copy.deepcopy(loss))
         # update global weights
-        w_glob = fl.FedAvg(w_locals)
+        w_glob = fl.FedAvg(w_locals, w_init = model_copy.state_dict())
+        
+        w_init = net_glob.state_dict()
+        delta_w_locals = []
+        sum_grads = 0
+        for i in range(0, len(w_locals)):
+            delta_w = {}
+            for k in w_init.keys():
+                delta_w[k] = w_locals[i][k] - w_init[k]
+                sum_grads += torch.sum(torch.abs(delta_w[k]))
+            delta_w_locals.append(delta_w)
+        ms_sum_grads.append(sum_grads.item())
 
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
@@ -167,6 +179,7 @@ if __name__ == '__main__':
     ms_acc_test_list.append(acc_test)
     ms_loss_train_list.append(loss_train)
     ms_loss_test_list.append(loss_test)
+    ms_sum_grads.append(0)
 
     # plot loss curve
     plt.figure()
@@ -177,13 +190,21 @@ if __name__ == '__main__':
     plt.legend(['Training acc', 'Testing acc'])
     plt.savefig('./{}/fed_acc_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid))
 
+    # plot gradients curve
+    plt.figure()
+    plt.plot(range(len(ms_sum_grads[1:-1])), ms_sum_grads[1:-1])
+    plt.ylabel('grads')
+    plt.savefig('./{}/fed_grads_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir,args.dataset, args.model, args.epochs, args.frac, args.iid))
+
+
     # Write metric store into a CSV
     metrics_df = pd.DataFrame(
         {
             'Train acc': ms_acc_train_list,
             'Test acc': ms_acc_test_list,
             'Train loss': ms_loss_train_list,
-            'Test loss': ms_loss_test_list
+            'Test loss': ms_loss_test_list,
+            'Sum Grads': ms_sum_grads
         })
     metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
