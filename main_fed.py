@@ -20,7 +20,7 @@ from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
 from models.Fed import FedLearn
 from models.test import test_img
 import pytorch_cifar.models as pcm
-import hybrid_snn_conversion.self_models as snn_models
+import models.vgg as ann_models
 import models.vgg_spiking_bntt as snn_models_bntt
 
 class SubsetLoaderMNIST(datasets.MNIST):
@@ -241,34 +241,11 @@ if __name__ == '__main__':
     if args.snn:
         if args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100':
             if args.model[0:3].lower() == 'vgg':
-                if args.bntt:
-                    model_args = {'num_cls': args.num_classes, 'timesteps': 20}
-                    net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
-                else:
-                    model_args = {'vgg_name': args.model, 'activation': args.activation, 'labels': args.num_classes, 'timesteps': args.timesteps, 'leak': args.leak, 'default_threshold': args.default_threshold, 'alpha': args.alpha, 'beta': args.beta, 'dropout': args.dropout, 'kernel_size': args.snn_kernel_size, 'dataset': args.dataset}
-                    net_glob = snn_models.VGG_SNN_STDB(**model_args).cuda()
+                model_args = {'num_cls': args.num_classes, 'timesteps': 20}
+                net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
     elif (args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100') and args.model[0:3].lower() == 'vgg':
         model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
-        net_glob = snn_models.VGG(**model_args).cuda()
-    elif args.dataset == 'CIFAR10':
-        if args.model == 'MobileNetV2':
-            net_glob = pcm.MobileNetV2().to(args.device)
-        else:
-            exit("Invalid model")
-    elif args.model == 'cnn' and (args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100'):
-        net_glob = CNNCifar(args=args).to(args.device)
-    elif args.model == 'VGG' and args.dataset == 'CIFAR10':
-        net_glob = VGG(args=args).to(args.device)
-    elif args.model == 'vgg11' and args.dataset == 'CIFAR100':
-        net_glob = VGG11_CIFAR100(args=args).to(args.device)
-    elif args.model == 'cnn' and args.dataset == 'mnist':
-        net_glob = CNNMnist(args=args).to(args.device)
-    elif args.model == 'mlp':
-        len_in = 1
-        for x in img_size:
-            len_in *= x
-        model_args = {'dim_in': len_in, 'dim_hidden': 200, 'dim_out': args.num_classes}
-        net_glob = MLP(**model_args ).to(args.device)
+        net_glob = ann_models.VGG(**model_args).cuda()
     else:
         exit('Error: unrecognized model')
     print(net_glob)
@@ -342,23 +319,7 @@ if __name__ == '__main__':
             loss_locals.append(copy.deepcopy(loss))
         # update global weights
         w_glob = fl.FedAvg(w_locals)
-        """
-        w_init = net_glob.state_dict()
-        delta_w_locals = []
-        for i in range(0, len(w_locals)):
-            delta_w = {}
-            for k in w_init.keys():
-                delta_w[k] = w_locals[i][k] - w_init[k]
-            delta_w_locals.append(delta_w)
-        if args.snn and args.bntt == False:
-            activity = net_glob.module.activity
-        else:
-            activity = None
-            activity_mask = None
-        w_glob, delta_w_avg, sparse_delta_w_locals = fl.FedAvgSparse(w_init, delta_w_locals, th_basis = args.sparsity_basis, pruning_type = args.pruning_type, sparsity = args.grad_sparsity, activity = activity, activity_multiplier = args.activity_multiplier)
- 
-        comm_cost, nz_grad = fl.count_gradients(delta_w_locals, sparse_delta_w_locals)
-        """
+
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
  
@@ -380,26 +341,7 @@ if __name__ == '__main__':
             ms_acc_test_list.append(acc_test)
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
- 
-            """
-            # print communication cost
-            tot_comm_cost = sum(comm_cost)
-            avg_comm_cost = sum(comm_cost) / len(comm_cost)
-            max_comm_cost = max(comm_cost)
-            print('Round {:3d}, Num Clients {}, Tot. Comm. Cost {:.1f}, Average Comm. Cost {:.1f}, Max Comm. Cost {:.1f}'.format(iter, len(comm_cost), tot_comm_cost, avg_comm_cost, max_comm_cost))
-            ms_num_client_list.append(len(comm_cost))
-            ms_tot_comm_cost_list.append(tot_comm_cost)
-            ms_avg_comm_cost_list.append(avg_comm_cost)
-            ms_max_comm_cost_list.append(max_comm_cost)
- 
-            tot_nz_grad = sum(nz_grad)
-            avg_nz_grad = sum(nz_grad) / len(nz_grad)
-            max_nz_grad = max(nz_grad)
-            print('Round {:3d}, Num Clients {}, Tot. Comm. Cost {:.1f}, Average Comm. Cost {:.1f}, Max Comm. Cost {:.1f}'.format(iter, len(nz_grad), tot_nz_grad, avg_nz_grad, max_nz_grad))
-            ms_tot_nz_grad_list.append(tot_nz_grad)
-            ms_avg_nz_grad_list.append(avg_nz_grad)
-            ms_max_nz_grad_list.append(max_nz_grad)
-            """
+
         if iter in lr_interval:
             args.lr = args.lr/args.lr_reduce
 
