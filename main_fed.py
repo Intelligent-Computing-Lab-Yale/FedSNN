@@ -19,64 +19,8 @@ from models.Update import LocalUpdate
 from models.Nets import MLP, CNNMnist, CNNCifar, VGG11_CIFAR100, VGG
 from models.Fed import FedLearn
 from models.test import test_img
-import pytorch_cifar.models as pcm
 import models.vgg as ann_models
 import models.vgg_spiking_bntt as snn_models_bntt
-
-class SubsetLoaderMNIST(datasets.MNIST):
-    def __init__(self, *args, exclude_list=[], **kwargs):
-        super(SubsetLoaderMNIST, self).__init__(*args, **kwargs)
-
-        if exclude_list == []:
-            return
-
-        labels = np.array(self.targets)
-        exclude = np.array(exclude_list).reshape(1, -1)
-        mask = ~(labels.reshape(-1, 1) == exclude).any(axis=1)
-
-        self.data = self.data[mask]
-        self.targets = labels[mask]
-
-class SubsetLoaderCIFAR10(datasets.CIFAR10):
-    def __init__(self, *args, exclude_list=[], **kwargs):
-        super(SubsetLoaderCIFAR10, self).__init__(*args, **kwargs)
-
-        if exclude_list == []:
-            return
-
-        labels = np.array(self.targets)
-        exclude = np.array(exclude_list).reshape(1, -1)
-        mask = ~(labels.reshape(-1, 1) == exclude).any(axis=1)
-
-        self.data = self.data[mask]
-        self.targets = labels[mask]
-
-class SubsetLoaderCIFAR100(datasets.CIFAR100):
-    def __init__(self, *args, exclude_list=[], **kwargs):
-        super(SubsetLoaderCIFAR100, self).__init__(*args, **kwargs)
-
-        if exclude_list == []:
-            return
-
-        labels = np.array(self.targets)
-        exclude = np.array(exclude_list).reshape(1, -1)
-        mask = ~(labels.reshape(-1, 1) == exclude).any(axis=1)
-
-        self.data = self.data[mask]
-        self.targets = labels[mask]
-
-def partition_dataset(dataset, part = "full"):
-    if part == "full":
-        return dataset
-    elif part == "first":
-        dataset.data = dataset.data[0::5]
-        dataset.targets = dataset.targets[0::5]
-    elif part == "second":
-        #dataset.data = dataset.data[1::5] + dataset.data[2::5] + dataset.data[3::5] + dataset.data[4::5]
-        dataset.data = np.concatenate((dataset.data[1::5], dataset.data[2::5], dataset.data[3::5], dataset.data[4::5]), axis=0)
-        dataset.targets = dataset.targets[1::5] + dataset.targets[2::5] + dataset.targets[3::5] + dataset.targets[4::5]
-    print("Data part size", len(dataset.data), len(dataset.targets))
-    return dataset
 
 def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batches = 10):
     loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
@@ -133,57 +77,6 @@ def find_activity(batch_size=512, timesteps=2500, architecture='VGG5', num_batch
     # return activity, activity_mask
     return activity
 
-
-def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
-    loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True)
-    net_glob.network_update(timesteps=args.timesteps, leak=1.0)
-
-    pos=0
-    thresholds=[]
-    
-    def find(layer, pos):
-        max_act=0
-        
-        print('Finding threshold for layer {}'.format(layer))
-        for batch_idx, (data, target) in enumerate(loader):
-            
-            data, target = data.cuda(), target.cuda()
-
-            with torch.no_grad():
-                net_glob.eval()
-                output = net_glob(data, find_max_mem=True, max_mem_layer=layer)
-                if output>max_act:
-                    max_act = output.item()
-
-                #f.write('\nBatch:{} Current:{:.4f} Max:{:.4f}'.format(batch_idx+1,output.item(),max_act))
-                if batch_idx==0:
-                    thresholds.append(max_act)
-                    pos = pos+1
-                    print(' {}'.format(thresholds))
-                    net_glob.threshold_update(scaling_factor=1.0, thresholds=thresholds[:])
-                    break
-        return pos
-
-    if architecture.lower().startswith('vgg'):                                     
-        for l in net_glob.features.named_children():                           
-            if isinstance(l[1], nn.Conv2d):
-                pos = find(int(l[0]), pos)
-            
-        for c in net_glob.classifier.named_children():                         
-            if isinstance(c[1], nn.Linear):                                        
-                if (int(l[0])+int(c[0])+1) == (len(net_glob.features) + len(net_glob.classifier) -1):       
-                    pass
-                else:
-                    pos = find(int(l[0])+int(c[0])+1, pos)                         
-                    
-    if architecture.lower().startswith('res'):                                     
-        for l in net_glob.pre_process.named_children():                        
-            if isinstance(l[1], nn.Conv2d):                                        
-                pos = find(int(l[0]), pos)
-    print('ANN thresholds: {}'.format(thresholds))
-    return thresholds
-
-
 if __name__ == '__main__':
     # parse args
     args = args_parser()
@@ -195,55 +88,34 @@ if __name__ == '__main__':
         torch.backends.cudnn.benchmark = False
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-    exclude_list = []
-    if args.subset == "odd":
-        exclude_list = list(range(0, args.num_classes,2))
-    elif args.subset == "even":
-        exclude_list = list(range(1, args.num_classes,2))
-
     # load dataset and split users
-    if args.dataset == 'mnist':
-        trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-        dataset_train = SubsetLoaderMNIST('../data/mnist/', train=True, download=True, transform=trans_mnist, exclude_list=exclude_list)
-        dataset_test = SubsetLoaderMNIST('../data/mnist/', train=False, download=True, transform=trans_mnist, exclude_list=exclude_list)
-        # sample users
-        if args.iid:
-            dict_users = mnist_iid(dataset_train, args.num_users)
-        else:
-            dict_users = mnist_noniid(dataset_train, args.num_users)
-    elif args.dataset == 'CIFAR10':
+    if args.dataset == 'CIFAR10':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-        dataset_train = SubsetLoaderCIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar, exclude_list=exclude_list)
-        dataset_test = SubsetLoaderCIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar, exclude_list=exclude_list)
-        dataset_train = partition_dataset(dataset_train, args.part)
+        dataset_train = datasets.CIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar)
+        dataset_test = datasets.CIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar)
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
             dict_users = cifar_non_iid(dataset_train, args.num_classes, args.num_users)
-            #exit('Error: only consider IID setting in CIFAR10')
     elif args.dataset == 'CIFAR100':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-        dataset_train = SubsetLoaderCIFAR100('../data/cifar100', train=True, download=True, transform=trans_cifar)
-        dataset_test = SubsetLoaderCIFAR100('../data/cifar100', train=False, download=True, transform=trans_cifar)
-        dataset_train = partition_dataset(dataset_train, args.part)
+        dataset_train = datasets.CIFAR100('../data/cifar100', train=True, download=True, transform=trans_cifar)
+        dataset_test = datasets.CIFAR100('../data/cifar100', train=False, download=True, transform=trans_cifar)
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
             dict_users = cifar_non_iid(dataset_train, args.num_classes, args.num_users)
-            #exit('Error: only consider IID setting in CIFAR10')
-
     else:
         exit('Error: unrecognized dataset')
     img_size = dataset_train[0][0].shape
 
     # build model
     model_args = {'args': args}
-    if args.snn:
-        if args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100':
             if args.model[0:3].lower() == 'vgg':
+        if args.snn:
                 model_args = {'num_cls': args.num_classes, 'timesteps': 20}
                 net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
-    elif (args.dataset == 'CIFAR10' or args.dataset == 'CIFAR100') and args.model[0:3].lower() == 'vgg':
+        else:
         model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
         net_glob = ann_models.VGG(**model_args).cuda()
     else:
@@ -253,11 +125,6 @@ if __name__ == '__main__':
     # copy weights
     if args.pretrained_model:
         net_glob.load_state_dict(torch.load(args.pretrained_model, map_location='cpu'))
-        if args.snn and args.bntt == False:
-            thresholds = find_threshold(batch_size=512, timesteps=1000, architecture = args.model)
-            net_glob.threshold_update(scaling_factor = args.scaling_factor, thresholds = thresholds[:])
-            activity = find_activity(batch_size=512, timesteps=1000, architecture = args.model, num_batches = 20)
-            net_glob.activity_update(activity = activity[:])
 
     net_glob = nn.DataParallel(net_glob)
     # training
@@ -298,8 +165,6 @@ if __name__ == '__main__':
 
     for iter in range(args.epochs):
         net_glob.train()
-        if args.snn and args.bntt == False:
-            net_glob.module.network_update(timesteps=args.timesteps, leak=args.leak)
         w_locals, loss_locals = [], []
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
@@ -307,11 +172,6 @@ if __name__ == '__main__':
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
             print(type(net_glob.module))
             model_copy = type(net_glob.module)(**model_args) # get a new instance
-            if args.snn and args.bntt == False:
-                thresholds = []
-                for value in net_glob.module.threshold.values():
-                    thresholds = thresholds + [value.item()]
-                model_copy.threshold_update(scaling_factor=1.0, thresholds=thresholds)
             model_copy = nn.DataParallel(model_copy)
             model_copy.load_state_dict(net_glob.state_dict()) # copy weights and stuff
             w, loss = local.train(net=model_copy.to(args.device))
@@ -350,7 +210,7 @@ if __name__ == '__main__':
     plt.figure()
     plt.plot(range(len(loss_train_list)), loss_train_list)
     plt.ylabel('train_loss')
-    plt.savefig('./{}/fed_loss_{}_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir,args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid))
+    plt.savefig('./{}/fed_loss_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir,args.dataset, args.model, args.epochs, args.frac, args.iid))
 
     # testing
     net_glob.eval()
@@ -372,7 +232,7 @@ if __name__ == '__main__':
     plt.plot()
     plt.ylabel('Accuracy')
     plt.legend(['Training acc', 'Testing acc'])
-    plt.savefig('./{}/fed_acc_{}_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid))
+    plt.savefig('./{}/fed_acc_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid))
 
     # Write metric store into a CSV
     metrics_df = pd.DataFrame(
@@ -382,7 +242,7 @@ if __name__ == '__main__':
             'Train loss': ms_loss_train_list,
             'Test loss': ms_loss_test_list
         })
-    metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid), sep='\t')
+    metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
     comm_metrics_df = pd.DataFrame(
         {
@@ -394,7 +254,7 @@ if __name__ == '__main__':
             #'avg_nz_grad': ms_avg_nz_grad_list,
             #'max_nz_grad': ms_max_nz_grad_list
         })
-    comm_metrics_df.to_csv('./{}/fed_comm_stats_{}_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.subset, args.model, args.epochs, args.frac, args.iid), sep='\t')
+    comm_metrics_df.to_csv('./{}/fed_comm_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
     # Print model's state_dict
     print("Model's state_dict:")

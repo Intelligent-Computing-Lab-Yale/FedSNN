@@ -41,8 +41,6 @@ class LocalUpdate(object):
         epoch_loss = []
         for iter in range(self.args.local_ep):
             batch_loss = []
-            if self.args.snn and self.args.bntt == False:
-                net.module.network_update(timesteps = self.args.timesteps, leak = self.args.leak)
             for batch_idx, (images, labels) in enumerate(self.ldr_train):
                 images, labels = images.to(self.args.device), labels.to(self.args.device)
                 net.zero_grad()
