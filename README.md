@@ -17,7 +17,10 @@ NB: for CIFAR-10, `num_channels` must be 3.
 
 ## Ackonwledgements
 Initial Code adopted from https://github.com/shaoxiongji/federated-learning
-Code for SNN training adopted from https://github.com/nitin-rathi/hybrid-snn-conversion
+
+Code for SNN training adopted from https://github.com/Intelligent-Computing-Lab-Yale/BNTT-Batch-Normalization-Through-Time
+
+
 
 ## References
 McMahan, Brendan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-Efficient Learning of Deep Networks from Decentralized Data. In Artificial Intelligence and Statistics (AISTATS), 2017.
