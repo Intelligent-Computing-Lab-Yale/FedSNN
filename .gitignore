@@ -55,3 +55,4 @@ cifar*
 test/
 ddd20/*dataset*
 ddd20/data
+nmnist/data
