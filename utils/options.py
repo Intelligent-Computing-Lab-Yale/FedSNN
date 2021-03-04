@@ -58,5 +58,6 @@ def args_parser():
     parser.add_argument('--train_acc_batches', default=200, type=int, help='print training progress after this many batches')
     parser.add_argument('--straggler_prob', type=float, default=0.0, help="straggler probability")
     parser.add_argument('--grad_noise_stdev', type=float, default=0.0, help="Noise level for gradients")
+    parser.add_argument('--dvs', action='store_true', help="Whether the input data is DVS")
     args = parser.parse_args()
     return args

@@ -342,9 +342,15 @@ class SNN_VGG9_TBN(nn.Module):
         fc_dropout_mask = self.drop(torch.ones([batch_size, 1024]).cuda())
 
         for t in range(self.num_steps):
-            spike_inp = PoissonGen(inp)
             if self.dvs:
-                spike_inp = inp[:, t, ...]
+                # print(inp)
+                # print(inp.shape)
+                # spike_inp = PoissonGen(torch.sum(inp, dim = 4)/50)
+                spike_inp = torch.sum(inp[..., int((300/self.num_steps)*t):int((300/self.num_steps)*(t+1))], dim=4)/int(300/(self.num_steps))
+                # print(torch.sum(inp, dim = 4))
+                # print(spike_inp.shape)
+            else:
+                spike_inp = PoissonGen(inp)
             # # spike_x = torch.cat([spike_inp]*22,1)[:,:64,:,:]
             # out_prev = spike_inp
             #

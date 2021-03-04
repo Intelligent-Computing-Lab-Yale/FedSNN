@@ -13,13 +13,19 @@ from torchvision import datasets, transforms
 import torch
 import torch.nn as nn
 
-from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid
+from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid, mnist_dvs_iid, mnist_dvs_non_iid, nmnist_iid, nmnist_non_iid
 from utils.options import args_parser
 from models.Update import LocalUpdate
 from models.Fed import FedLearn
 from models.test import test_img
 import models.vgg as ann_models
 import models.vgg_spiking_bntt as snn_models_bntt
+
+from neurodata.load_data import create_dataloader
+import tables
+import yaml
+
+from pysnn.datasets import nmnist_train_test
 
 if __name__ == '__main__':
     # parse args
@@ -49,19 +55,71 @@ if __name__ == '__main__':
             dict_users = cifar_iid(dataset_train, args.num_users)
         else:
             dict_users = cifar_non_iid(dataset_train, args.num_classes, args.num_users)
+    elif args.dataset == 'N-MNIST':
+        dataset_train, dataset_test = nmnist_train_test("nmnist/data")
+        if args.iid:
+            dict_users = nmnist_iid(dataset_train, args.num_users)
+        else:
+            dict_users = nmnist_non_iid(dataset_train, args.num_classes, args.num_users)
+    elif args.dataset == 'MNIST-DVS':
+        params_file = 'params.yml'
+
+        with open(params_file, 'r') as f:
+            params = yaml.load(f)
+        
+        dataset_path = "/gpfs/loomis/project/panda/shared/MNIST_DVS/mnist_dvs_events_new.hdf5"
+
+        dataset = tables.open_file(dataset_path)
+        x_max = dataset.root.stats.train_data[1] // params['ds']
+
+        dataset.close()
+
+        ### Network parameters
+        params['n_classes'] = len(params['classes'])
+        params['n_output_neurons'] = params['n_classes']
+
+        if params['model'] == 'snn':
+            params['n_input_neurons'] = (1 + params['polarity']) * x_max * x_max
+            size = [params['n_input_neurons']]
+        elif params['model'] == 'wta':
+            params['n_input_neurons'] = x_max * x_max
+            size = [2, params['n_input_neurons']]
+        else:
+            raise NotImplementedError
+        size = [2, 32, 32]
+
+        dataset_train, dataset_test = create_dataloader(dataset_path, batch_size=args.bs, size=size, classes=params['classes'],
+                                            sample_length_train=params['sample_length_train'], sample_length_test=params['sample_length_test'], dt=params['dt'],
+                                            polarity=params['polarity'], ds=params['ds'], shuffle_test=True, num_workers=0)
+        # train_iterator = iter(dataset_train)
+        # try:
+        #     inputs, outputs = next(train_iterator)
+        #     print(inputs.shape, outputs.shape)
+        # except StopIteration:
+        #     train_iterator = iter(train_dl)
+        #     inputs, outputs = next(train_iterator)
+        if args.iid:
+            dict_users = mnist_dvs_iid(dataset_train, args.num_users)
+        else:
+            dict_users = mnist_dvs_non_iid(dataset_train, args.num_classes, args.num_users)
+    elif args.dataset == "DDD":
+        pass
     else:
         exit('Error: unrecognized dataset')
     img_size = dataset_train[0][0].shape
 
     # build model
     model_args = {'args': args}
-            if args.model[0:3].lower() == 'vgg':
+    if args.model[0:3].lower() == 'vgg':
         if args.snn:
+            if args.dataset == 'N-MNIST':
+                model_args = {'num_cls': args.num_classes, 'timesteps': 20, 'dvs': True, 'inp_maps': 2, 'img_size': 34}
+            else:
                 model_args = {'num_cls': args.num_classes, 'timesteps': 20}
-                net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
+            net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
         else:
-        model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
-        net_glob = ann_models.VGG(**model_args).cuda()
+            model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
+            net_glob = ann_models.VGG(**model_args).cuda()
     else:
         exit('Error: unrecognized model')
     print(net_glob)
@@ -84,14 +142,17 @@ if __name__ == '__main__':
     ms_acc_test_list, ms_loss_test_list = [], []
     ms_num_client_list, ms_tot_comm_cost_list, ms_avg_comm_cost_list, ms_max_comm_cost_list = [], [], [], []
     ms_tot_nz_grad_list, ms_avg_nz_grad_list, ms_max_nz_grad_list = [], [], []
+    ms_sum_grads = []
 
     # testing
     net_glob.eval()
-    acc_train, loss_train = test_img(net_glob, dataset_train, args)
-    acc_test, loss_test = test_img(net_glob, dataset_test, args)
-    print("Initial Training accuracy: {:.2f}".format(acc_train))
-    print("Initial Testing accuracy: {:.2f}".format(acc_test))
-
+    # acc_train, loss_train = test_img(net_glob, dataset_train, args)
+    # acc_test, loss_test = test_img(net_glob, dataset_test, args)
+    # print("Initial Training accuracy: {:.2f}".format(acc_train))
+    # print("Initial Testing accuracy: {:.2f}".format(acc_test))
+    acc_train, loss_train = 0, 0
+    acc_test, loss_test = 0, 0
+    sum_grads = 0
     # Add metrics to store
     ms_acc_train_list.append(acc_train)
     ms_acc_test_list.append(acc_test)
