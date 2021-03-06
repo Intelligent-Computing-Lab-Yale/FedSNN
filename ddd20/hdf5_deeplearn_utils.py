@@ -7,7 +7,8 @@ from skimage import img_as_bool
 from collections import defaultdict
 import sklearn
 import torch
-import Nets_Spiking_BNTT
+from PIL import Image
+import sys
 
 def get_real_endpoint(h5f):
     if h5f['timestamp'][-1] != 0:
@@ -21,7 +22,7 @@ def get_common_endpoint(h5f_aps, h5f_dvs):
     return min(get_real_endpoint(h5f_aps), get_real_endpoint(h5f_dvs))
 
 def chunker(seq, size):
-    return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
+    return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 def yield_chunker(seq, size):
     for pos in range(0, len(seq), size):
@@ -251,56 +252,6 @@ class HDF5VisualIterator(object):
             yield [vid.astype('float32'), bY.astype('float32')]
             b += 1
 
-class MultiHDF5EncoderDecoderVisualIterator(object):
-    def flow(self, h5fs_aps, h5fs_dvs, dataset_keys_aps, dataset_keys_dvs, indexes_key, batch_size, shuffle=True, seperate_dvs_channels=False):
-        # Get some constants
-        all_data_idxs_aps = []
-        dataset_lookup_aps = {h5f:dataset_key for h5f, dataset_key in zip(h5fs_aps, dataset_keys_aps)}
-        for h5f in h5fs_aps:
-            for idx in np.array(h5f[indexes_key]):
-                all_data_idxs_aps.append((h5f, idx))
-        all_data_idxs_dvs = []
-        dataset_lookup_dvs = {h5f:dataset_key for h5f, dataset_key in zip(h5fs_dvs, dataset_keys_dvs)}
-        for h5f in h5fs_dvs:
-            for idx in np.array(h5f[indexes_key]):
-                all_data_idxs_dvs.append((h5f, idx))
-        num_examples_aps = len(all_data_idxs_aps)
-        num_examples_dvs = len(all_data_idxs_dvs)
-        num_examples = min(num_examples_aps, num_examples_dvs)
-        num_batches = int(np.ceil(float(num_examples)/batch_size))
-        # Shuffle the data
-        if shuffle:
-            all_data_idxs_aps, all_data_idxs_dvs = sklearn.utils.shuffle(all_data_idxs_aps[:num_examples], all_data_idxs_dvs[:num_examples])
-            # np.random.shuffle(all_data_idxs)
-        b = 0
-        while b < num_batches:
-            curr_idxs_aps = all_data_idxs_aps[b*batch_size:(b+1)*batch_size]
-            curr_idxs_dvs = all_data_idxs_dvs[b*batch_size:(b+1)*batch_size]
-            todo_dict_aps = defaultdict(list)
-            todo_dict_dvs = defaultdict(list)
-            for (h5f_aps, idx_aps), (h5f_dvs, idx_dvs) in zip(curr_idxs_aps, curr_idxs_dvs):
-                todo_dict_aps[h5f_aps].append(idx_aps)
-                todo_dict_dvs[h5f_dvs].append(idx_dvs)
-            vids_aps = []
-            vids_dvs = []
-            for (h5f_aps, idxs_aps), (h5f_dvs, idxs_dvs) in zip(todo_dict_aps.items(), todo_dict_dvs.items()):
-                vids_aps.extend(h5f_aps[dataset_lookup_aps[h5f_aps]][sorted(idxs_aps)])
-                vids_dvs.extend(h5f_dvs[dataset_lookup_dvs[h5f_dvs]][sorted(idxs_dvs)])
-
-            # Add a single-dimensional color channel for grayscale
-            vids_aps = np.expand_dims(vids_aps, axis=1).astype('float32')/255.-0.5
-            if seperate_dvs_channels:
-                vids_dvs = np.array(vids_dvs)/255.-0.5
-            else:
-                vids_dvs = np.expand_dims(vids_dvs, axis=1).astype('float32')/255.-0.5
-            vids_aps[np.isnan(vids_aps)] = 0.
-            vids_aps[np.isinf(vids_aps)] = 0.
-            vids_dvs[np.isnan(vids_dvs)] = 0.
-            vids_dvs[np.isinf(vids_dvs)] = 0.
-            yield [vids_aps.astype('float32'), vids_dvs.astype('float32')]
-            b += 1
-
-
 class MultiHDF5VisualIterator(object):
     def flow(self, h5fs, dataset_keys, indexes_key, batch_size, shuffle=True, seperate_dvs_channels=False):
         # Get some constants
@@ -323,6 +274,8 @@ class MultiHDF5VisualIterator(object):
             vids = []
             bY = []
             for h5f, idxs in todo_dict.items():
+                print(h5f)
+                print(idxs)
                 vids.extend(h5f[dataset_lookup[h5f]][sorted(idxs)])
                 bY.extend(h5f['steering_wheel_angle'][sorted(idxs)])
 
@@ -334,7 +287,45 @@ class MultiHDF5VisualIterator(object):
             vids[np.isnan(vids)] = 0.
             vids[np.isinf(vids)] = 0.
             bY = np.expand_dims(bY, axis=1)
-            yield [vids.astype('float32'), bY.astype('float32')]
+            yield [vids, bY.astype('float32')]
+            b += 1
+
+class MultiHDF5VisualIteratorFederated(object):
+    def flow(self, h5fs, dataset_keys, indexes_key, batch_size, shuffle=True, seperate_dvs_channels=False, distribution="iid"):
+        # Get some constants
+        all_data_idxs = []
+        dataset_lookup = {h5f:dataset_key for h5f, dataset_key in zip(h5fs, dataset_keys)}
+        for h5f in h5fs:
+            for idx in np.array(h5f[indexes_key]):
+                all_data_idxs.append((h5f, idx))
+        num_examples = len(all_data_idxs)
+        num_batches = int(np.ceil(float(num_examples)/batch_size))
+        # Shuffle the data
+        if shuffle:
+            np.random.shuffle(all_data_idxs)
+        b = 0
+        while b < num_batches:
+            curr_idxs = all_data_idxs[b*batch_size:(b+1)*batch_size]
+            todo_dict = defaultdict(list)
+            for (h5f, idx) in curr_idxs:
+                todo_dict[h5f].append(idx)
+            vids = []
+            bY = []
+            for h5f, idxs in todo_dict.items():
+                print(h5f)
+                print(idxs)
+                vids.extend(h5f[dataset_lookup[h5f]][sorted(idxs)])
+                bY.extend(h5f['steering_wheel_angle'][sorted(idxs)])
+
+            # Add a single-dimensional color channel for grayscale
+            if seperate_dvs_channels:
+                vids = np.array(vids)/255.-0.5
+            else:
+                vids = np.expand_dims(vids, axis=1).astype('float32')/255.-0.5
+            vids[np.isnan(vids)] = 0.
+            vids[np.isinf(vids)] = 0.
+            bY = np.expand_dims(bY, axis=1)
+            yield [vids, bY.astype('float32')]
             b += 1
 
 def resize_int8(frame, size):
@@ -360,41 +351,6 @@ def dvs_to_aps(dvs_image, model, device):
     aps_image = aps_batch[0, 0, ...]
     return aps_image
 
-def run_dvs_to_aps_into_new_key(h5f, key, new_key, new_size, pretrained_model_path, chunk_size=1024, timesteps = 20):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model_args = {'timesteps': timesteps,
-                  'img_size': 80,
-                  'inp_maps': 2,
-                  'num_cls': 1,
-                  'inp_type': 'dvs',
-                  'encoder_decoder': True}
-    encoder_network = Nets_Spiking_BNTT.SNN_VGG9_TBN(**model_args)
-    encoder_network.load_state_dict(torch.load(pretrained_model_path))
-    encoder_network.eval()
-    encoder_network.to(device)
-    chunk_generator = yield_chunker(h5f[key], chunk_size)
-    # Set some basics
-    dtype = h5f[key].dtype
-    row_idx = 0
-    resized_shape = (chunk_size,) + new_size
-    print(resized_shape)
-    max_shape = (h5f[key].shape[0],) + resized_shape[1:]
-    print(max_shape)
-    if new_key in h5f:
-        dset = h5f[new_key]
-    else:
-        dset = h5f.create_dataset(new_key, shape=max_shape, maxshape=max_shape,
-                            chunks=resized_shape, dtype='uint8')
-    # Write all data out, one chunk at a time
-    for chunk in chunk_generator:
-        # Operate on the data
-        encoded_chunk = np.array([dvs_to_aps(frame, encoder_network, device).cpu().numpy() for frame in chunk])
-        print(encoded_chunk.shape)
-        # Write the next chunk
-        dset[row_idx:row_idx+chunk.shape[0]] = encoded_chunk
-        # Increment the row count
-        row_idx += chunk.shape[0]
-
 def resize_data_into_new_key(h5f, key, new_key, new_size, chunk_size=1024, seperate_dvs_channels=False, split_timesteps=False, timesteps = 10):
     chunk_generator = yield_chunker(h5f[key], chunk_size)
 
@@ -404,7 +360,7 @@ def resize_data_into_new_key(h5f, key, new_key, new_size, chunk_size=1024, seper
 
     if key == 'aps_frame':
         do_resize = resize_int8
-    elif key == 'dvs_accum' or key == 'dvs_split' or key == 'dvs_channels':
+    elif key == 'dvs_frame' or key == 'dvs_split' or key == 'dvs_channels':
         do_resize = resize_int16
     else:
         raise AssertionError('Unknown data type')

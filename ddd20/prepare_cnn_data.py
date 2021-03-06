@@ -3,6 +3,7 @@ import numpy as np
 import h5py
 import os, sys, time, argparse
 from hdf5_deeplearn_utils import calc_data_mean, calc_data_std, build_train_test_split, check_and_fix_timestamps, resize_data_into_new_key
+from PIL import Image
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -11,8 +12,8 @@ if __name__ == '__main__':
     parser.add_argument('--train_length', default=5*60, type=float)
     parser.add_argument('--test_length', default=2*60, type=float)
     parser.add_argument('--skip_mean_std', default=0, type=int)
-    parser.add_argument('--new_height', default=80, type=int)
-    parser.add_argument('--new_width', default=80, type=int)
+    parser.add_argument('--new_height', default=40, type=int)
+    parser.add_argument('--new_width', default=40, type=int)
     parser.add_argument('--seperate_dvs_channels', action="store_true")
     parser.add_argument('--split_timesteps', action='store_true')
     parser.add_argument('--timesteps', type=int, default=10)

@@ -59,5 +59,6 @@ def args_parser():
     parser.add_argument('--straggler_prob', type=float, default=0.0, help="straggler probability")
     parser.add_argument('--grad_noise_stdev', type=float, default=0.0, help="Noise level for gradients")
     parser.add_argument('--dvs', action='store_true', help="Whether the input data is DVS")
+    parser.add_argument('--modality', type=str, default='aps', help="aps or dvs for the type of data to work on DDD20")
     args = parser.parse_args()
     return args
