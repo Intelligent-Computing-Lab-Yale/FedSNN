@@ -24,6 +24,11 @@ import models.vgg_spiking_bntt as snn_models_bntt
 from neurodata.load_data import create_dataloader
 import tables
 import yaml
+import glob
+import h5py
+from ddd20.hdf5_deeplearn_utils import MultiHDF5VisualIterator
+
+from PIL import Image
 
 from pysnn.datasets import nmnist_train_test
 
@@ -61,52 +66,24 @@ if __name__ == '__main__':
             dict_users = nmnist_iid(dataset_train, args.num_users)
         else:
             dict_users = nmnist_non_iid(dataset_train, args.num_classes, args.num_users)
-    elif args.dataset == 'MNIST-DVS':
-        params_file = 'params.yml'
-
-        with open(params_file, 'r') as f:
-            params = yaml.load(f)
-        
-        dataset_path = "/gpfs/loomis/project/panda/shared/MNIST_DVS/mnist_dvs_events_new.hdf5"
-
-        dataset = tables.open_file(dataset_path)
-        x_max = dataset.root.stats.train_data[1] // params['ds']
-
-        dataset.close()
-
-        ### Network parameters
-        params['n_classes'] = len(params['classes'])
-        params['n_output_neurons'] = params['n_classes']
-
-        if params['model'] == 'snn':
-            params['n_input_neurons'] = (1 + params['polarity']) * x_max * x_max
-            size = [params['n_input_neurons']]
-        elif params['model'] == 'wta':
-            params['n_input_neurons'] = x_max * x_max
-            size = [2, params['n_input_neurons']]
-        else:
-            raise NotImplementedError
-        size = [2, 32, 32]
-
-        dataset_train, dataset_test = create_dataloader(dataset_path, batch_size=args.bs, size=size, classes=params['classes'],
-                                            sample_length_train=params['sample_length_train'], sample_length_test=params['sample_length_test'], dt=params['dt'],
-                                            polarity=params['polarity'], ds=params['ds'], shuffle_test=True, num_workers=0)
-        # train_iterator = iter(dataset_train)
-        # try:
-        #     inputs, outputs = next(train_iterator)
-        #     print(inputs.shape, outputs.shape)
-        # except StopIteration:
-        #     train_iterator = iter(train_dl)
-        #     inputs, outputs = next(train_iterator)
-        if args.iid:
-            dict_users = mnist_dvs_iid(dataset_train, args.num_users)
-        else:
-            dict_users = mnist_dvs_non_iid(dataset_train, args.num_classes, args.num_users)
-    elif args.dataset == "DDD":
+    elif args.dataset == "DDD20":
+        files = glob.glob('/home/yv35/project/fl-git/ddd20/processed_dataset_run3/day/*' + args.modality + '*.hdf5')
+        h5fs = [h5py.File(h5file, 'r') for h5file in files]
+        print(h5fs[0].keys())
+        dataset_keys = len(h5fs)*[args.modality + "_frame"]
+        temp = MultiHDF5VisualIterator()
+        for data in temp.flow(h5fs, dataset_keys, 'train_idxs', batch_size=args.bs, shuffle=True):
+            vid_in, bY = data
+            print("Input Shape: {}, Output Shape: {}".format(vid_in.shape, bY.shape))
+            # Creates PIL image
+            # Keeping for debugging purpose
+            # print(vid_in[0, 0, ...])
+            # img = Image.fromarray((255*(0.5 + vid_in[0, 0, ...])).astype(np.uint8), 'L')
+            break
         pass
     else:
         exit('Error: unrecognized dataset')
-    img_size = dataset_train[0][0].shape
+    # img_size = dataset_train[0][0].shape
 
     # build model
     model_args = {'args': args}
