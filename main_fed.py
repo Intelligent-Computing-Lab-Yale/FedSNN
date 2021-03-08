@@ -199,8 +199,8 @@ if __name__ == '__main__':
             # testing
             net_glob.eval()
             if args.dataset == "DDD20":
-                loss_train = test_img(net_glob, args)
-                loss_test = test_img(net_glob, args)
+                loss_train = test_img_ddd(net_glob, args)
+                loss_test = test_img_ddd(net_glob, args)
                 print("Round {:d}, Training loss: {:.2f}".format(iter, loss_train))
                 print("Round {:d}, Testing loss: {:.2f}".format(iter, loss_test))
             else:
