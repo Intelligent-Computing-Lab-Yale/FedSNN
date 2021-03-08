@@ -318,7 +318,7 @@ class MultiHDF5VisualIteratorFederated(object):
         if shuffle:
             np.random.shuffle(all_data_idxs)
         b = 0
-        while b < num_batches:
+        while b < num_batches - 1:
             curr_idxs = all_data_idxs[b*batch_size:(b+1)*batch_size]
             todo_dict = defaultdict(list)
             for (h5f, idx) in curr_idxs:
