@@ -15,7 +15,7 @@ import torch.nn as nn
 
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid, mnist_dvs_iid, mnist_dvs_non_iid, nmnist_iid, nmnist_non_iid
 from utils.options import args_parser
-from models.Update import LocalUpdate
+from models.Update import LocalUpdate, LocalUpdateDDD
 from models.Fed import FedLearn
 from models.test import test_img
 import models.vgg as ann_models
@@ -26,7 +26,7 @@ import tables
 import yaml
 import glob
 import h5py
-from ddd20.hdf5_deeplearn_utils import MultiHDF5VisualIterator
+from ddd20.hdf5_deeplearn_utils import MultiHDF5VisualIteratorFederated
 
 from PIL import Image
 
@@ -43,6 +43,8 @@ if __name__ == '__main__':
         torch.backends.cudnn.benchmark = False
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
+    dataset_keys = None
+    h5fs = None
     # load dataset and split users
     if args.dataset == 'CIFAR10':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -69,10 +71,17 @@ if __name__ == '__main__':
     elif args.dataset == "DDD20":
         files = glob.glob('/home/yv35/project/fl-git/ddd20/processed_dataset_run3/day/*' + args.modality + '*.hdf5')
         h5fs = [h5py.File(h5file, 'r') for h5file in files]
-        print(h5fs[0].keys())
-        dataset_keys = len(h5fs)*[args.modality + "_frame"]
-        temp = MultiHDF5VisualIterator()
-        for data in temp.flow(h5fs, dataset_keys, 'train_idxs', batch_size=args.bs, shuffle=True):
+        dataset_keys = []
+        h5fs = []
+        key = args.modality + "_frame_40x40"
+        for h5file in files:
+            f = h5py.File(h5file, 'r')
+            if key in f.keys():
+                h5fs.append(f)
+                dataset_keys.append(key)
+        args.num_users = len(h5fs)
+        temp = MultiHDF5VisualIteratorFederated()
+        for data in temp.flow(h5fs, dataset_keys, 'train_idxs', batch_size=args.bs, shuffle=True, iid = args.iid, client_id = 0):
             vid_in, bY = data
             print("Input Shape: {}, Output Shape: {}".format(vid_in.shape, bY.shape))
             # Creates PIL image
@@ -91,11 +100,13 @@ if __name__ == '__main__':
         if args.snn:
             if args.dataset == 'N-MNIST':
                 model_args = {'num_cls': args.num_classes, 'timesteps': 20, 'dvs': True, 'inp_maps': 2, 'img_size': 34}
+            elif args.dataset == "DDD20":
+                model_args = {'num_cls': 1, 'timesteps': 20, 'inp_maps': 1, 'img_size': 40}
             else:
                 model_args = {'num_cls': args.num_classes, 'timesteps': 20}
             net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
         else:
-            model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': args.snn_kernel_size, 'dropout': args.dropout}
+            model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': 3, 'dropout': args.dropout}
             net_glob = ann_models.VGG(**model_args).cuda()
     else:
         exit('Error: unrecognized model')
@@ -152,7 +163,10 @@ if __name__ == '__main__':
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
         for idx in idxs_users:
-            local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx])
+            if args.dataset == "DDD20":
+                local = LocalUpdateDDD(args = args, dataset_keys = dataset_keys, h5fs = h5fs, client_id=idx) # Takes in the client id and the dataloader later decides what data to assign this client
+            else:
+                local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx]) # idxs needs the list of indices assigned to this particular client
             model_copy = type(net_glob.module)(**model_args) # get a new instance
             model_copy = nn.DataParallel(model_copy)
             model_copy.load_state_dict(net_glob.state_dict()) # copy weights and stuff
@@ -184,10 +198,16 @@ if __name__ == '__main__':
         if iter % args.eval_every == 0:
             # testing
             net_glob.eval()
-            acc_train, loss_train = test_img(net_glob, dataset_train, args)
-            acc_test, loss_test = test_img(net_glob, dataset_test, args)
-            print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
-            print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
+            if args.dataset == "DDD20":
+                loss_train = test_img(net_glob, args)
+                loss_test = test_img(net_glob, args)
+                print("Round {:d}, Training loss: {:.2f}".format(iter, loss_train))
+                print("Round {:d}, Testing loss: {:.2f}".format(iter, loss_test))
+            else:
+                acc_train, loss_train = test_img(net_glob, dataset_train, args)
+                acc_test, loss_test = test_img(net_glob, dataset_test, args)
+                print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
+                print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
  
             # Add metrics to store
             ms_acc_train_list.append(acc_train)
