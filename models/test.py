@@ -6,6 +6,10 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import sys
+import os
+sys.path.append(os.getcwd() + '/..')
+from ddd20.hdf5_deeplearn_utils import MultiHDF5VisualIteratorFederated
 
 
 def test_img(net_g, datatest, args):
@@ -31,6 +35,26 @@ def test_img(net_g, datatest, args):
         print('\nTest set: Average loss: {:.4f} \nAccuracy: {}/{} ({:.2f}%)\n'.format(
             test_loss, correct, len(data_loader.dataset), accuracy))
     return accuracy.item(), test_loss
+
+def test_img_ddd(net_g, args):
+    net_g.eval()
+    # testing
+    test_loss = 0
+    data_loader = MultiHDF5VisualIteratorFederated()
+    loss_func = nn.MSELoss()
+    l = len(data_loader)
+    count = 0
+    for idx, (data, target) in enumerate(data_loader.flow(self.h5fs, self.dataset_keys, 'test_idxs', batch_size=self.args.bs, shuffle=True, iid = self.args.iid, client_id = 0, num_clients = 1)):
+        if args.gpu != -1:
+            data, target = data.cuda(), target.cuda()
+        log_probs = net_g(data)
+        # sum up batch loss
+        test_loss += loss_func(log_probs, target).item()
+        # get the index of the max log-probability
+        count += 1
+
+    test_loss /= count
+    return test_loss
 
 def comp_activity(net_g, dataset, args):
     net_g.eval()
