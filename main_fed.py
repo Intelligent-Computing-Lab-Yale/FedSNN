@@ -17,7 +17,7 @@ from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid, mn
 from utils.options import args_parser
 from models.Update import LocalUpdate, LocalUpdateDDD
 from models.Fed import FedLearn
-from models.test import test_img
+from models.test import test_img, test_img_ddd
 import models.vgg as ann_models
 import models.vgg_spiking_bntt as snn_models_bntt
 
@@ -199,8 +199,8 @@ if __name__ == '__main__':
             # testing
             net_glob.eval()
             if args.dataset == "DDD20":
-                loss_train = test_img_ddd(net_glob, args)
-                loss_test = test_img_ddd(net_glob, args)
+                loss_train = test_img_ddd(net_glob, args, h5fs, dataset_keys)
+                loss_test = test_img_ddd(net_glob, args, h5fs, dataset_keys)
                 print("Round {:d}, Training loss: {:.2f}".format(iter, loss_train))
                 print("Round {:d}, Testing loss: {:.2f}".format(iter, loss_test))
             else:
@@ -227,10 +227,16 @@ if __name__ == '__main__':
 
     # testing
     net_glob.eval()
-    acc_train, loss_train = test_img(net_glob, dataset_train, args)
-    acc_test, loss_test = test_img(net_glob, dataset_test, args)
-    print("Final Training accuracy: {:.2f}".format(acc_train))
-    print("Final Testing accuracy: {:.2f}".format(acc_test))
+    if args.dataset == "DDD20":
+        loss_train = test_img_ddd(net_glob, args, h5fs, dataset_keys)
+        loss_test = test_img_ddd(net_glob, args, h5fs, dataset_keys)
+        print("Final Training loss: {:.2f}".format(loss_train))
+        print("Final Testing loss: {:.2f}".format(loss_test))
+    else:
+        acc_train, loss_train = test_img(net_glob, dataset_train, args)
+        acc_test, loss_test = test_img(net_glob, dataset_test, args)
+        print("Final Training accuracy: {:.2f}".format(acc_train))
+        print("Final Testing accuracy: {:.2f}".format(acc_test))
 
     # Add metrics to store
     ms_acc_train_list.append(acc_train)
