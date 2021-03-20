@@ -291,16 +291,18 @@ class MultiHDF5VisualIterator(object):
             b += 1
 
 class MultiHDF5VisualIteratorFederated(object):
-    def flow(self, h5fs, dataset_keys, indexes_key, batch_size, shuffle=True, seperate_dvs_channels=False, iid = True, client_id = 0, num_clients = 1):
-        # Get some constants
+    def flow(self, h5fs, dataset_keys, indexes_key, batch_size, shuffle=True, seperate_dvs_channels=False, iid = True, client_id = 0, num_clients = 1, seq_length = 10, speed_gt = 15):
         if iid:
             all_data_idxs = []
             dataset_lookup = {h5f:dataset_key for h5f, dataset_key in zip(h5fs, dataset_keys)}
             count = 0
             for h5f in h5fs:
+                avail_idxs = set(np.array(h5f[indexes_key]))
                 for idx in np.array(h5f[indexes_key]):
                     if count%num_clients == client_id:
-                        all_data_idxs.append((h5f, idx))
+                        above_speed = np.all(np.array(h5f['vehicle_speed'][idx:idx+seq_length]) > speed_gt)
+                        if (idx+seq_length in avail_idxs) and above_speed:
+                            all_data_idxs.append((h5f, idx))
                     count += 1
                     if count == num_clients:
                         count = 0
@@ -310,7 +312,9 @@ class MultiHDF5VisualIteratorFederated(object):
             dataset_key = dataset_keys[client_id]
             dataset_lookup = {h5f:dataset_key}
             for idx in np.array(h5f[indexes_key]):
-                all_data_idxs.append((h5f, idx))
+                above_speed = np.all(np.array(h5f['vehicle_speed'][idx:idx+seq_length]) > speed_gt)
+                if (idx+seq_length in avail_idxs) and above_speed:
+                    all_data_idxs.append((h5f, idx))
 
         num_examples = len(all_data_idxs)
         num_batches = int(np.ceil(float(num_examples)/batch_size))
