@@ -58,13 +58,13 @@ class VGG(nn.Module):
                             )
         elif vgg_name!='VGG5' and dataset =='DDD20':
             self.classifier = nn.Sequential(
-                            nn.Linear(256*2*2, 4096, bias=False),
+                            nn.Linear(256*5*5, 512, bias=False),
                             nn.ReLU(inplace=True),
                             nn.Dropout(0.5),
-                            nn.Linear(4096, 4096, bias=False),
+                            nn.Linear(512, 256, bias=False),
                             nn.ReLU(inplace=True),
                             nn.Dropout(0.5),
-                            nn.Linear(4096, labels, bias=False)
+                            nn.Linear(256, labels, bias=False)
                             )
         elif vgg_name == 'VGG5' and dataset!= 'MNIST':
             self.classifier = nn.Sequential(

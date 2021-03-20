@@ -90,9 +90,10 @@ class LocalUpdateDDD(object):
             for batch_idx, (images, labels) in enumerate(self.ldr_train.flow(self.h5fs, self.dataset_keys, 'train_idxs', batch_size=self.args.bs, shuffle=True, iid = self.args.iid, client_id = self.client_id, num_clients = self.args.num_users)):
                 images, labels = torch.from_numpy(images).to(self.args.device), torch.from_numpy(labels).to(self.args.device)
                 net.zero_grad()
-                log_probs = net(images)
-                loss = self.loss_func(log_probs, labels)
+                output = net(images)
+                loss = self.loss_func(output, labels)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(net.parameters(), 2)
                 optimizer.step()
                 if self.args.verbose and batch_idx % 10 == 0:
                     print('Update Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(

@@ -36,25 +36,31 @@ def test_img(net_g, datatest, args):
             test_loss, correct, len(data_loader.dataset), accuracy))
     return accuracy.item(), test_loss
 
-def test_img_ddd(net_g, args):
+def test_img_ddd(net_g, args, h5fs, dataset_keys, subset):
     net_g.eval()
     # testing
     test_loss = 0
     data_loader = MultiHDF5VisualIteratorFederated()
     loss_func = nn.MSELoss()
-    l = len(data_loader)
     count = 0
-    for idx, (data, target) in enumerate(data_loader.flow(self.h5fs, self.dataset_keys, 'test_idxs', batch_size=self.args.bs, shuffle=True, iid = self.args.iid, client_id = 0, num_clients = 1)):
-        if args.gpu != -1:
-            data, target = data.cuda(), target.cuda()
-        log_probs = net_g(data)
-        # sum up batch loss
-        test_loss += loss_func(log_probs, target).item()
-        # get the index of the max log-probability
-        count += 1
+    eva = 0
+    client_ids = [i for i in range(args.num_users)]
+    for client_id in client_ids:
+        for idx, (data, target) in enumerate(data_loader.flow(h5fs, dataset_keys, subset + '_idxs', batch_size=args.bs, shuffle=True, iid = args.iid, client_id = client_id, num_clients = 1)):
+            if args.gpu != -1:
+                data, target = torch.from_numpy(data).to(args.device), torch.from_numpy(target).to(args.device)
+            output = net_g(data)
+            # sum up batch loss
+            test_loss += loss_func(output, target).item()
+            eva += (1 - torch.div(torch.var(output - target),torch.var(target)).item())
+            if count%200 == 0:
+                print(output[0], target[0], test_loss)
+            count += 1 # Count number of batches
 
-    test_loss /= count
-    return test_loss
+    test_loss /= (count)
+    eva /= count
+    test_loss = test_loss**(0.5)
+    return test_loss, eva
 
 def comp_activity(net_g, dataset, args):
     net_g.eval()
