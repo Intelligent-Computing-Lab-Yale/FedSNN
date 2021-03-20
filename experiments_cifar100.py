@@ -59,15 +59,15 @@ def generate_script(file_name, gpu_type = "any", grace_partition = "gpu", exp_na
 def main():
     grace_partition = "gpu"
     gpu_type = "any"
-    dataset = "DDD20"
-    num_classes = 10
+    dataset = "CIFAR100"
+    num_classes = 100
     model = "VGG9"
     bs = 32
     eval_every = 1
     optimizer = "SGD"
-    lr = 0.005
+    lr = 0.1
     lr_reduce = 5
-    exp_name = "fed_snn_ddd"
+    exp_name = "fed_snn_bntt_cifar100"
     epochs = 100
     local_ep = 2
     gpu = 0
@@ -79,17 +79,17 @@ def main():
     # grad_noise_stdev_list = [0.0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
     grad_noise_stdev_list = [0.0]
     
-    # user_combs = [[1, 1], [20, 0.25], [10, 0.2], [5, 1], [100, 0.1], [150, 0.1], [200, 0.1]]
-    user_combs = [[1, 1], [5,1]]
-    for rep in range(3):
-        dir_name = "./bntt_experiments_ddd20_vgg9_repeat"+str(rep)+"/"
+    user_combs = [[1, 1], [20, 0.25], [10, 0.2], [5, 1], [100, 0.1], [150, 0.1], [200, 0.1]]
+    # user_combs = [[100, 0.1]]
+    for rep in range(1):
+        dir_name = "./bntt_experiments_extended_cifar100_vgg9_run4_repeat"+str(rep)+"/"
         for straggler_prob in straggler_prob_list:
             for grad_noise_stdev in grad_noise_stdev_list:
                 for comb in user_combs:
                     iid = False
                     num_users = comb[0]
                     frac = comb[1]
-                    exp_name = "fed_snn_ddd_nc_" + str(num_users) + "_frac_" + str(frac) + "_bs_" + str(bs) + "_lr_" + str(lr) + "_epochs_" + str(epochs) + "_optim_" + optimizer + "_iid_" + str(iid) + "_ann_" + str(ann_baseline) + "_straggler_" + str(straggler_prob) + "_nobn_" + str(no_batchnorm) + "_grad_noise_" + str(grad_noise_stdev)
+                    exp_name = "fed_snn_bntt_nc_" + str(num_users) + "_frac_" + str(frac) + "_bs_" + str(bs) + "_lr_" + str(lr) + "_epochs_" + str(epochs) + "_optim_" + optimizer + "_iid_" + str(iid) + "_ann_" + str(ann_baseline) + "_straggler_" + str(straggler_prob) + "_nobn_" + str(no_batchnorm) + "_grad_noise_" + str(grad_noise_stdev)
                     try:
                         file_name = "rog_scipt" + str(time.time()) + ".sh"
                         os.makedirs(dir_name + exp_name)
@@ -101,7 +101,7 @@ def main():
                     iid = True
                     num_users = comb[0]
                     frac = comb[1]
-                    exp_name = "fed_snn_ddd_nc_" + str(num_users) + "_frac_" + str(frac) + "_bs_" + str(bs) + "_lr_" + str(lr) + "_epochs_" + str(epochs) + "_optim_" + optimizer + "_iid_" + str(iid) + "_ann_" + str(ann_baseline) + "_straggler_" + str(straggler_prob) + "_nobn_" + str(no_batchnorm) + "_grad_noise_" + str(grad_noise_stdev)
+                    exp_name = "fed_snn_bntt_nc_" + str(num_users) + "_frac_" + str(frac) + "_bs_" + str(bs) + "_lr_" + str(lr) + "_epochs_" + str(epochs) + "_optim_" + optimizer + "_iid_" + str(iid) + "_ann_" + str(ann_baseline) + "_straggler_" + str(straggler_prob) + "_nobn_" + str(no_batchnorm) + "_grad_noise_" + str(grad_noise_stdev)
                     try:
                         file_name = "rog_scipt" + str(time.time()) + ".sh"
                         os.makedirs(dir_name + exp_name)

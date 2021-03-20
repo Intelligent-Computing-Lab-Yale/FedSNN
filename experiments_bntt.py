@@ -43,7 +43,6 @@ def generate_cmd(exp_name = "default", dataset = "CIFAR10", num_classes = 10, mo
     s = s + '--timesteps ' + str(timesteps) + ' '
     if ann_baseline == False:
         s = s + '--snn '
-        s = s + '--bntt '
     s = s + '--straggler_prob ' + str(straggler_prob) + ' '
     s = s + '--grad_noise_stdev ' + str(grad_noise_stdev) + ' '
     s = s + '--result_dir ' + dir_name + exp_name + '/snn_bntt '
