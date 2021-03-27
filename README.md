@@ -1,8 +1,8 @@
 # Federated Learning with Spiking Neural Networks
 
 ## Requirements
-python>=3.6  
-pytorch>=0.4
+python>=3.7
+pytorch>=1.7.1
 
 ## Run
 
@@ -20,13 +20,5 @@ Initial Code adopted from https://github.com/shaoxiongji/federated-learning
 
 Code for SNN training adopted from https://github.com/Intelligent-Computing-Lab-Yale/BNTT-Batch-Normalization-Through-Time
 
-
-
-## References
-McMahan, Brendan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-Efficient Learning of Deep Networks from Decentralized Data. In Artificial Intelligence and Statistics (AISTATS), 2017.
-
-Shaoxiong Ji, Shirui Pan, Guodong Long, Xue Li, Jing Jiang, and Zi Huang. Learning private neural language modeling with attentive aggregation. In the 2019 International Joint Conference on Neural Networks (IJCNN), 2019. [[Paper](https://arxiv.org/abs/1812.07108)] [[Code](https://github.com/shaoxiongji/fed-att)]
-
-Jing Jiang, Shaoxiong Ji, and Guodong Long. Decentralized knowledge acquisition for mobile internet applications. World Wide Web, 2020. [[Paper](https://link.springer.com/article/10.1007/s11280-019-00775-w)]
 
 
