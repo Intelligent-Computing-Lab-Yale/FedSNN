@@ -1,19 +1,20 @@
 # Federated Learning with Spiking Neural Networks
 
+This repo contains the source code for the paper "Federated Learning with Spiking Neural Networks". 
+
 ## Requirements
 python>=3.7
 pytorch>=1.7.1
 
 ## Run
 
-For example:
-> python main_fed.py --dataset mnist --iid --num_channels 1 --model cnn --epochs 50 --gpu 0  
+For example, to train a federated SNN model with 100 clients and 10 clients participating in each round:
+> python main_fed.py --dataset CIFAR10 --model VGG9 --num_channels 3 --snn --iid --epochs 100 --gpu 0 --lr 0.1 --num_users 100 --frac 0.1
 
-NB: for CIFAR-10, `num_channels` must be 3.
+Other options can be found by running
+> pythin main_fed.py --help
 
-## Results
-### CIFAR10
-### MNIST
+Sample scripts are provided at `test_cifar10.sh` and `test_cifar100.sh`.
 
 ## Ackonwledgements
 Initial Code adopted from https://github.com/shaoxiongji/federated-learning
