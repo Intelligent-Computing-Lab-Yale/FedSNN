@@ -1,6 +1,6 @@
 # Federated Learning with Spiking Neural Networks
 
-This repo contains the source code for the paper "Federated Learning with Spiking Neural Networks". 
+This repo contains the source code for the paper "Federated Learning with Spiking Neural Networks" (https://arxiv.org/abs/2106.06579).
 
 ## Requirements
 python>=3.7
