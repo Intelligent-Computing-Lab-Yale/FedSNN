@@ -15,19 +15,16 @@ import torch.nn as nn
 
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid, mnist_dvs_iid, mnist_dvs_non_iid, nmnist_iid, nmnist_non_iid
 from utils.options import args_parser
-from models.Update import LocalUpdate, LocalUpdateDDD
+from models.Update import LocalUpdate
 from models.Fed import FedLearn
-from models.test import test_img, test_img_ddd
+from models.test import test_img
 import models.vgg as ann_models
 import models.resnet as resnet_models
 import models.vgg_spiking_bntt as snn_models_bntt
 
-from neurodata.load_data import create_dataloader
 import tables
 import yaml
 import glob
-import h5py
-from ddd20.hdf5_deeplearn_utils import MultiHDF5VisualIteratorFederated
 
 from PIL import Image
 
@@ -69,29 +66,6 @@ if __name__ == '__main__':
             dict_users = nmnist_iid(dataset_train, args.num_users)
         else:
             dict_users = nmnist_non_iid(dataset_train, args.num_classes, args.num_users)
-    elif args.dataset == "DDD20":
-        files = glob.glob('/home/yv35/project/fl-git/ddd20/processed_dataset_run_3_15_1_15/day/*' + args.modality + '*.hdf5')
-        h5fs = [h5py.File(h5file, 'r') for h5file in files]
-        dataset_keys = []
-        h5fs = []
-        key = args.modality + "_frame_80x80"
-        for h5file in files:
-            f = h5py.File(h5file, 'r')
-            if key in f.keys():
-                h5fs.append(f)
-                dataset_keys.append(key)
-        if args.iid != True:
-            args.num_users = len(h5fs)
-        temp = MultiHDF5VisualIteratorFederated()
-        for data in temp.flow(h5fs, dataset_keys, 'train_idxs', batch_size=args.bs, shuffle=True, iid = args.iid, client_id = 0):
-            vid_in, bY = data
-            print("Input Shape: {}, Output Shape: {}".format(vid_in.shape, bY.shape))
-            # Creates PIL image
-            # Keeping for debugging purpose
-            # print(vid_in[0, 0, ...])
-            # img = Image.fromarray((255*(0.5 + vid_in[0, 0, ...])).astype(np.uint8), 'L')
-            break
-        pass
     else:
         exit('Error: unrecognized dataset')
     # img_size = dataset_train[0][0].shape

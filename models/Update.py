@@ -10,8 +10,6 @@ import random
 from sklearn import metrics
 import sys
 import os
-sys.path.append(os.getcwd() + '/..')
-from ddd20.hdf5_deeplearn_utils import MultiHDF5VisualIteratorFederated
 
 
 class DatasetSplit(Dataset):
@@ -62,43 +60,5 @@ class LocalUpdate(object):
                     for value in net.module.threshold.values():
                         thresholds = thresholds + [round(value.item(), 2)]
                     print('Epoch: {}, batch {}, threshold {}, leak {}, timesteps {}'.format(iter, batch_idx + 1, thresholds, net.module.leak.item(), net.module.timesteps))
-            epoch_loss.append(sum(batch_loss)/len(batch_loss))
-        return net.state_dict(), sum(epoch_loss) / len(epoch_loss)
-
-class LocalUpdateDDD(object):
-    def __init__(self, args, dataset_keys=None, h5fs=None, client_id = 0):
-        self.args = args
-        self.loss_func = nn.MSELoss()
-        self.dataset_keys = dataset_keys
-        self.h5fs = h5fs
-        self.client_id = client_id
-        self.ldr_train = MultiHDF5VisualIteratorFederated()
-
-    def train(self, net):
-        net.train()
-        # train and update
-        if self.args.optimizer == "SGD":
-            optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=self.args.momentum, weight_decay = self.args.weight_decay)
-        elif self.args.optimizer == "Adam":
-            optimizer = torch.optim.Adam(net.parameters(), lr = self.args.lr, weight_decay = self.args.weight_decay, amsgrad = True)
-        else:
-            print("Invalid optimizer")
-
-        epoch_loss = []
-        for iter in range(self.args.local_ep):
-            batch_loss = []
-            for batch_idx, (images, labels) in enumerate(self.ldr_train.flow(self.h5fs, self.dataset_keys, 'train_idxs', batch_size=self.args.bs, shuffle=True, iid = self.args.iid, client_id = self.client_id, num_clients = self.args.num_users)):
-                images, labels = torch.from_numpy(images).to(self.args.device), torch.from_numpy(labels).to(self.args.device)
-                net.zero_grad()
-                output = net(images)
-                loss = self.loss_func(output, labels)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(net.parameters(), 2)
-                optimizer.step()
-                if self.args.verbose and batch_idx % 10 == 0:
-                    print('Update Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                        iter, batch_idx * len(images), len(self.ldr_train.dataset),
-                               100. * batch_idx / len(self.ldr_train), loss.item()))
-                batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
         return net.state_dict(), sum(epoch_loss) / len(epoch_loss)
