@@ -74,13 +74,8 @@ if __name__ == '__main__':
     model_args = {'args': args}
     if args.model[0:3].lower() == 'vgg':
         if args.snn:
-            if args.dataset == 'N-MNIST':
-                model_args = {'num_cls': args.num_classes, 'timesteps': 20, 'dvs': True, 'inp_maps': 2, 'img_size': 34}
-            elif args.dataset == "DDD20":
-                model_args = {'num_cls': 1, 'timesteps': 20, 'inp_maps': 1, 'img_size': 40}
-            else:
-                model_args = {'num_cls': args.num_classes, 'timesteps': 20}
-            net_glob = snn_models_bntt.SNN_VGG9_TBN(**model_args).cuda()
+            model_args = {'num_cls': args.num_classes, 'timesteps': args.timesteps}
+            net_glob = snn_models_bntt.SNN_VGG9_BNTT(**model_args).cuda()
         else:
             model_args = {'vgg_name': args.model, 'labels': args.num_classes, 'dataset': args.dataset, 'kernel_size': 3, 'dropout': args.dropout}
             net_glob = ann_models.VGG(**model_args).cuda()
@@ -108,8 +103,8 @@ if __name__ == '__main__':
     val_acc_list, net_list = [], []
 
     # metrics to store
-    ms_acc_train_list, ms_loss_train_list,  ms_eva_train_list = [], [], []
-    ms_acc_test_list, ms_loss_test_list, ms_eva_test_list = [], [], []
+    ms_acc_train_list, ms_loss_train_list = [], []
+    ms_acc_test_list, ms_loss_test_list = [], []
     ms_num_client_list, ms_tot_comm_cost_list, ms_avg_comm_cost_list, ms_max_comm_cost_list = [], [], [], []
     ms_tot_nz_grad_list, ms_avg_nz_grad_list, ms_max_nz_grad_list = [], [], []
     ms_sum_grads = []
@@ -120,16 +115,14 @@ if __name__ == '__main__':
     # acc_test, loss_test = test_img(net_glob, dataset_test, args)
     # print("Initial Training accuracy: {:.2f}".format(acc_train))
     # print("Initial Testing accuracy: {:.2f}".format(acc_test))
-    acc_train, loss_train, eva_train = 0, 0, 0
-    acc_test, loss_test, eva_test = 0, 0, 0
+    acc_train, loss_train = 0, 0
+    acc_test, loss_test = 0, 0
     sum_grads = 0
     # Add metrics to store
     ms_acc_train_list.append(acc_train)
     ms_acc_test_list.append(acc_test)
     ms_loss_train_list.append(loss_train)
     ms_loss_test_list.append(loss_test)
-    ms_eva_train_list.append(eva_train)
-    ms_eva_test_list.append(eva_test)
     ms_sum_grads.append(sum_grads)
 
     # Define LR Schedule
@@ -148,10 +141,7 @@ if __name__ == '__main__':
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
         print(idxs_users)
         for idx in idxs_users:
-            if args.dataset == "DDD20":
-                local = LocalUpdateDDD(args = args, dataset_keys = dataset_keys, h5fs = h5fs, client_id=idx) # Takes in the client id and the dataloader later decides what data to assign this client
-            else:
-                local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx]) # idxs needs the list of indices assigned to this particular client
+            local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx]) # idxs needs the list of indices assigned to this particular client
             model_copy = type(net_glob.module)(**model_args) # get a new instance
             model_copy = nn.DataParallel(model_copy)
             model_copy.load_state_dict(net_glob.state_dict()) # copy weights and stuff
@@ -184,26 +174,16 @@ if __name__ == '__main__':
         if iter % args.eval_every == 0:
             # testing
             net_glob.eval()
-            if args.dataset == "DDD20":
-                loss_train, eva_train = test_img_ddd(net_glob, args, h5fs, dataset_keys, 'train')
-                print("Round {:d}, Training loss: {:.2f}".format(iter, loss_train))
-                print("Round {:d}, Training EVA: {:.2f}".format(iter, eva_train))
-                loss_test, eva_test = test_img_ddd(net_glob, args, h5fs, dataset_keys, 'test')
-                print("Round {:d}, Testing loss: {:.2f}".format(iter, loss_test))
-                print("Round {:d}, Testing EVA: {:.2f}".format(iter, eva_test))
-            else:
-                acc_train, loss_train = test_img(net_glob, dataset_train, args)
-                print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
-                acc_test, loss_test = test_img(net_glob, dataset_test, args)
-                print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
+            acc_train, loss_train = test_img(net_glob, dataset_train, args)
+            print("Round {:d}, Training accuracy: {:.2f}".format(iter, acc_train))
+            acc_test, loss_test = test_img(net_glob, dataset_test, args)
+            print("Round {:d}, Testing accuracy: {:.2f}".format(iter, acc_test))
  
             # Add metrics to store
             ms_acc_train_list.append(acc_train)
             ms_acc_test_list.append(acc_test)
             ms_loss_train_list.append(loss_train)
             ms_loss_test_list.append(loss_test)
-            ms_eva_train_list.append(eva_train)
-            ms_eva_test_list.append(eva_test)
 
         if iter in lr_interval:
             args.lr = args.lr/args.lr_reduce
@@ -217,26 +197,16 @@ if __name__ == '__main__':
 
     # testing
     net_glob.eval()
-    if args.dataset == "DDD20":
-        loss_train, eva_train = test_img_ddd(net_glob, args, h5fs, dataset_keys, 'train')
-        print("Round {:d}, Training loss: {:.2f}".format(iter, loss_train))
-        print("Round {:d}, Training EVA: {:.2f}".format(iter, eva_train))
-        loss_test, eva_test = test_img_ddd(net_glob, args, h5fs, dataset_keys, 'test')
-        print("Round {:d}, Testing loss: {:.2f}".format(iter, loss_test))
-        print("Round {:d}, Testing EVA: {:.2f}".format(iter, eva_test))
-    else:
-        acc_train, loss_train = test_img(net_glob, dataset_train, args)
-        print("Final Training accuracy: {:.2f}".format(acc_train))
-        acc_test, loss_test = test_img(net_glob, dataset_test, args)
-        print("Final Testing accuracy: {:.2f}".format(acc_test))
+    acc_train, loss_train = test_img(net_glob, dataset_train, args)
+    print("Final Training accuracy: {:.2f}".format(acc_train))
+    acc_test, loss_test = test_img(net_glob, dataset_test, args)
+    print("Final Testing accuracy: {:.2f}".format(acc_test))
 
     # Add metrics to store
     ms_acc_train_list.append(acc_train)
     ms_acc_test_list.append(acc_test)
     ms_loss_train_list.append(loss_train)
     ms_loss_test_list.append(loss_test)
-    ms_eva_train_list.append(eva_train)
-    ms_eva_test_list.append(eva_test)
     ms_sum_grads.append(0)
 
     # plot loss curve
@@ -244,17 +214,10 @@ if __name__ == '__main__':
     plt.plot(range(len(ms_acc_train_list)), ms_acc_train_list)
     plt.plot(range(len(ms_acc_test_list)), ms_acc_test_list)
     plt.plot()
+    plt.yticks(np.arange(0, 100, 10))
     plt.ylabel('Accuracy')
     plt.legend(['Training acc', 'Testing acc'])
     plt.savefig('./{}/fed_acc_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid))
-
-    plt.figure()
-    plt.plot(range(len(ms_eva_train_list)), ms_eva_train_list)
-    plt.plot(range(len(ms_eva_test_list)), ms_eva_test_list)
-    plt.plot()
-    plt.ylabel('EVA')
-    plt.legend(['Training EVA', 'Testing EVA'])
-    plt.savefig('./{}/fed_eva_{}_{}_{}_C{}_iid{}.png'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid))
 
     # plot gradients curve
     plt.figure()
@@ -270,9 +233,7 @@ if __name__ == '__main__':
             'Test acc': ms_acc_test_list,
             'Train loss': ms_loss_train_list,
             'Test loss': ms_loss_test_list,
-            'Sum Grads': ms_sum_grads,
-            'Train eva': ms_eva_train_list,
-            'Test eva': ms_eva_test_list
+            'Sum Grads': ms_sum_grads
         })
     metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
