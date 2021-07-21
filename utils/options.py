@@ -14,7 +14,7 @@ def args_parser():
     parser.add_argument('--local_bs', type=int, default=16, help="local batch size: B")
     parser.add_argument('--bs', type=int, default=16, help="test batch size")
     parser.add_argument('--lr', type=float, default=1e-4, help="learning rate")
-    parser.add_argument('--lr_interval', default='0.60 0.80 0.90', type=str, help='intervals at which to reduce lr, expressed as %%age of total epochs')
+    parser.add_argument('--lr_interval', default='0.40 0.60 0.80 0.90', type=str, help='intervals at which to reduce lr, expressed as %%age of total epochs')
 
     parser.add_argument('--lr_reduce', default=5, type=int, help='reduction factor for learning rate')
     parser.add_argument('--timesteps', default=50, type=int, help='simulation timesteps')
@@ -26,10 +26,10 @@ def args_parser():
     parser.add_argument('--beta', default=0.01, type=float, help='parameter beta for STDB')
     parser.add_argument('--snn_kernel_size', default=3, type=int, help='filter size for the conv layers')
     parser.add_argument('--optimizer', default='Adam', type=str, help='optimizer for SNN backpropagation', choices=['SGD', 'Adam'])
-    parser.add_argument('--weight_decay', default=5e-4, type=float, help='weight decay parameter for the optimizer')
+    parser.add_argument('--weight_decay', default=1e-4, type=float, help='weight decay parameter for the optimizer')
     parser.add_argument('--dropout', default=0.3, type=float, help='dropout percentage for conv layers')
 
-    parser.add_argument('--momentum', type=float, default=0.95, help="SGD momentum (default: 0.5)")
+    parser.add_argument('--momentum', type=float, default=0.9, help="SGD momentum (default: 0.5)")
     parser.add_argument('--split', type=str, default='user', help="train-test split type, user or sample")
 
     # model arguments
