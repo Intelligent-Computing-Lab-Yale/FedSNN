@@ -17,6 +17,7 @@ from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_non_iid, mn
 from utils.options import args_parser
 from models.Update import LocalUpdate
 from models.Fed import FedLearn
+from models.Fed import model_deviation
 from models.test import test_img
 import models.vgg as ann_models
 import models.resnet as resnet_models
@@ -25,6 +26,7 @@ import models.vgg_spiking_bntt as snn_models_bntt
 import tables
 import yaml
 import glob
+import json
 
 from PIL import Image
 
@@ -107,6 +109,7 @@ if __name__ == '__main__':
     ms_acc_test_list, ms_loss_test_list = [], []
     ms_num_client_list, ms_tot_comm_cost_list, ms_avg_comm_cost_list, ms_max_comm_cost_list = [], [], [], []
     ms_tot_nz_grad_list, ms_avg_nz_grad_list, ms_max_nz_grad_list = [], [], []
+    ms_model_deviation = []
 
     # testing
     net_glob.eval()
@@ -133,35 +136,44 @@ if __name__ == '__main__':
 
     for iter in range(args.epochs):
         net_glob.train()
-        w_locals, loss_locals = [], []
+        w_locals_selected, loss_locals_selected = [], []
+        w_locals_all, loss_locals_all = [], []
         m = max(int(args.frac * args.num_users), 1)
         idxs_users = np.random.choice(range(args.num_users), m, replace=False)
-        print(idxs_users)
-        for idx in idxs_users:
+        print("Selected clients:", idxs_users)
+        # for idx in idxs_users:
+        # Do local update in all the clients # Not required (local updates in only the selected clients is enough) for normal experiments but neeeded for model deviation analysis
+        for idx in range(args.num_users):
             local = LocalUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx]) # idxs needs the list of indices assigned to this particular client
             model_copy = type(net_glob.module)(**model_args) # get a new instance
             model_copy = nn.DataParallel(model_copy)
             model_copy.load_state_dict(net_glob.state_dict()) # copy weights and stuff
             w, loss = local.train(net=model_copy.to(args.device))
-            w_locals.append(copy.deepcopy(w))
-            loss_locals.append(copy.deepcopy(loss))
+            w_locals_all.append(copy.deepcopy(w))
+            loss_locals_all.append(copy.deepcopy(loss))
+            if idx in idxs_users:
+                w_locals_selected.append(copy.deepcopy(w))
+                loss_locals_selected.append(copy.deepcopy(loss))
+        
+        model_dev_list = model_deviation(w_locals_all, net_glob.state_dict())
+        ms_model_deviation.append(model_dev_list)
         # update global weights
-        w_glob = fl.FedAvg(w_locals, w_init = model_copy.state_dict())
+        w_glob = fl.FedAvg(w_locals_selected, w_init = net_glob.state_dict())
         
         w_init = net_glob.state_dict()
-        delta_w_locals = []
-        for i in range(0, len(w_locals)):
+        delta_w_locals_selected = []
+        for i in range(0, len(w_locals_selected)):
             delta_w = {}
             for k in w_init.keys():
-                delta_w[k] = w_locals[i][k] - w_init[k]
-            delta_w_locals.append(delta_w)
+                delta_w[k] = w_locals_selected[i][k] - w_init[k]
+            delta_w_locals_selected.append(delta_w)
 
         # copy weight to net_glob
         net_glob.load_state_dict(w_glob)
  
         # print loss
-        print(loss_locals)
-        loss_avg = sum(loss_locals) / len(loss_locals)
+        print("Local loss:", loss_locals_selected)
+        loss_avg = sum(loss_locals_selected) / len(loss_locals_selected)
         print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
         loss_train_list.append(loss_avg)
  
@@ -223,3 +235,7 @@ if __name__ == '__main__':
     metrics_df.to_csv('./{}/fed_stats_{}_{}_{}_C{}_iid{}.csv'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid), sep='\t')
 
     torch.save(net_glob.module.state_dict(), './{}/saved_model'.format(args.result_dir))
+
+    fn = './{}/model_deviation_{}_{}_{}_C{}_iid{}.json'.format(args.result_dir, args.dataset, args.model, args.epochs, args.frac, args.iid)
+    with open(fn, 'w') as f:
+        json.dump(ms_model_deviation, f)

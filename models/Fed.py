@@ -26,6 +26,20 @@ def percentile(t: torch.tensor, q: float) -> Union[int, float]:
     result = t.view(-1).kthvalue(k).values.item()
     return result
 
+def model_diff(w, w_init):
+    diff = 0
+    for k in w_init.keys():
+        if not ("num_batches_tracked" in k):
+            diff += torch.linalg.norm(w[k] - w_init[k])
+    return diff
+
+def model_deviation(w_locals, w_init):
+    model_deviation_list = []
+    print("Num clients:",len(w_locals))
+    for w in w_locals:
+        model_deviation_list.append(model_diff(w, w_init).item())
+    return model_deviation_list
+
 class FedLearn(object):
     def __init__(self, args):
         self.args = args
@@ -249,4 +263,3 @@ class FedLearn(object):
                 num_grads[i] += delta_w_locals[i][k].numel()
                 nz_grads[i] += torch.nonzero(sparse_delta_w_locals[i][k]).size(0)
          return num_grads, nz_grads
-
