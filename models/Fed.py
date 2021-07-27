@@ -53,17 +53,17 @@ class FedLearn(object):
         w_avg = copy.deepcopy(w[0]) 
         for k in w_avg.keys():
             if w_init:
-                w_avg[k] = w_avg[k] + torch.mean(torch.abs(w_init[k] - w[0][k])*1.0) * torch.randn(w[0][k].size()) * self.args.grad_noise_stdev # Scale the noise by mean of the absolute value of the model updates
+                w_avg[k] = w_avg[k].cpu() + torch.mean(torch.abs(w_init[k].cpu() - w[0][k].cpu())*1.0) * torch.randn(w[0][k].size()) * self.args.grad_noise_stdev # Scale the noise by mean of the absolute value of the model updates
             else:
-                w_avg[k] = w_avg[k] + torch.randn(w[0][k].size()) * self.args.grad_noise_stdev # Add gaussian noise to the model updates
+                w_avg[k] = w_avg[k].cpu() + torch.randn(w[0][k].size()) * self.args.grad_noise_stdev # Add gaussian noise to the model updates
         for k in w_avg.keys():
             for i in range(1, len(w)):
                 if non_stragglers[i] == 1:
                     if w_init:
-                        w_avg[k] = w_avg[k] + w[i][k] + torch.mean(torch.abs(w_init[k] - w[i][k])*1.0) * torch.randn(w[i][k].size()) * self.args.grad_noise_stdev # Scale the noise by mean of the absolute value of the model updates
+                        w_avg[k] = w_avg[k].cpu() + w[i][k].cpu() + torch.mean(torch.abs(w_init[k].cpu() - w[i][k].cpu())*1.0) * torch.randn(w[i][k].size()) * self.args.grad_noise_stdev # Scale the noise by mean of the absolute value of the model updates
                         # 1.0 is to convert into float
                     else:
-                        w_avg[k] = w_avg[k] + w[i][k] + torch.randn(w[i][k].size()) * self.args.grad_noise_stdev # Add gaussian noise to the model updates
+                        w_avg[k] = w_avg[k].cpu() + w[i][k].cpu() + torch.randn(w[i][k].size()) * self.args.grad_noise_stdev # Add gaussian noise to the model updates
             w_avg[k] = torch.div(w_avg[k], sum(non_stragglers))
         return w_avg
 

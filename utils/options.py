@@ -14,10 +14,10 @@ def args_parser():
     parser.add_argument('--local_bs', type=int, default=16, help="local batch size: B")
     parser.add_argument('--bs', type=int, default=16, help="test batch size")
     parser.add_argument('--lr', type=float, default=1e-4, help="learning rate")
-    parser.add_argument('--lr_interval', default='0.40 0.60 0.80 0.90', type=str, help='intervals at which to reduce lr, expressed as %%age of total epochs')
+    parser.add_argument('--lr_interval', default='0.33 0.66', type=str, help='intervals at which to reduce lr, expressed as %%age of total epochs')
 
-    parser.add_argument('--lr_reduce', default=5, type=int, help='reduction factor for learning rate')
-    parser.add_argument('--timesteps', default=50, type=int, help='simulation timesteps')
+    parser.add_argument('--lr_reduce', default=10, type=int, help='reduction factor for learning rate')
+    parser.add_argument('--timesteps', default=25, type=int, help='simulation timesteps')
     parser.add_argument('--leak', default=1.0, type=float, help='membrane leak')
     parser.add_argument('--scaling_factor', default=0.7, type=float, help='scaling factor for thresholds at reduced timesteps')
     parser.add_argument('--default_threshold', default=1.0, type=float, help='intial threshold to train SNN from scratch')

@@ -41,7 +41,7 @@ if __name__ == '__main__':
     if args.device != 'cpu':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    # torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
     dataset_keys = None
     h5fs = None
