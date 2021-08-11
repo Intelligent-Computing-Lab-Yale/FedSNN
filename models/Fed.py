@@ -30,7 +30,7 @@ def model_diff(w, w_init):
     diff = 0
     for k in w_init.keys():
         if not ("num_batches_tracked" in k):
-            diff += torch.linalg.norm(w[k] - w_init[k])
+            diff += torch.linalg.norm(w[k] - w_init[k])/(1 + torch.linalg.norm(w_init[k]))
     return diff
 
 def model_deviation(w_locals, w_init):
