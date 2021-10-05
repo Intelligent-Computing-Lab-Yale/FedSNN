@@ -25,7 +25,7 @@ def args_parser():
     parser.add_argument('--alpha', default=0.3, type=float, help='parameter alpha for STDB')
     parser.add_argument('--beta', default=0.01, type=float, help='parameter beta for STDB')
     parser.add_argument('--snn_kernel_size', default=3, type=int, help='filter size for the conv layers')
-    parser.add_argument('--optimizer', default='Adam', type=str, help='optimizer for SNN backpropagation', choices=['SGD', 'Adam'])
+    parser.add_argument('--optimizer', default='SGD', type=str, help='optimizer for SNN backpropagation', choices=['SGD', 'Adam'])
     parser.add_argument('--weight_decay', default=1e-4, type=float, help='weight decay parameter for the optimizer')
     parser.add_argument('--dropout', default=0.3, type=float, help='dropout percentage for conv layers')
 
