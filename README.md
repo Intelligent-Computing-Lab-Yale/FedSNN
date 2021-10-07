@@ -8,8 +8,8 @@ pytorch>=1.7.1
 
 ## Run
 
-For example, to train a federated SNN model with 100 clients and 10 clients participating in each round:
-> python main_fed.py --dataset CIFAR10 --model VGG9 --num_channels 3 --snn --iid --epochs 100 --gpu 0 --lr 0.1 --num_users 100 --frac 0.1
+For example, to train a federated SNN model with 10 clients and 2 clients participating in each round:
+> python main_fed.py --snn --dataset CIFAR10 --num_classes 10 --model VGG9 --optimizer SGD --bs 32 --local_bs 32 --lr 0.1 --lr_reduce 5 --epochs 100 --local_ep 2 --eval_every 1 --num_users 10 --frac 0.2 --iid --gpu 0 --timesteps 20 --result_dir test
 
 Other options can be found by running
 > pythin main_fed.py --help
